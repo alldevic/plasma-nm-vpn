@@ -163,7 +163,18 @@ def test_unresolvable_server_without_cache(names, no_dns):
     assert "using the cached IP 198.51.100.1" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn")
 
 
-def test_ip_literal_needs_no_dns(names):
+@pytest.fixture
+def quiet_ntp():
+    """systemd-timesyncd queries the "ISP" DNS for pool.ntp.org now and then; this case counts every query."""
+    active = ok("systemctl is-active --quiet systemd-timesyncd")
+    if active:
+        sh("systemctl stop systemd-timesyncd")
+    yield
+    if active:
+        sh("systemctl start systemd-timesyncd")
+
+
+def test_ip_literal_needs_no_dns(names, quiet_ntp):
     names.append("pnv-n-literal")
     hy2("pnv-n-literal", server="198.51.100.1")
     cap = subprocess.Popen(["timeout", "20", "tcpdump", "-n", "-l", "-i", "stand-cli", "port", "53"],
@@ -172,7 +183,7 @@ def test_ip_literal_needs_no_dns(names):
     assert connect("pnv-n-literal").returncode == 0
     time.sleep(1)
     cap.terminate()
-    assert cap.communicate()[0].strip() == ""
+    assert [l for l in cap.communicate()[0].splitlines() if "?" in l] == []
 
 
 def test_cache_ages_by_modification_time():
