@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+# tun-fd NAME VAR CMD...: attach to the existing TUN NAME (as its owner), pass it as fd 3 in $VAR, exec CMD.
+import fcntl, os, struct, sys
+
+TUNSETIFF, IFF_TUN, IFF_NO_PI = 0x400454CA, 0x0001, 0x1000
+
+name, var, cmd = sys.argv[1], sys.argv[2], sys.argv[3:]
+fd = os.open("/dev/net/tun", os.O_RDWR)
+fcntl.ioctl(fd, TUNSETIFF, struct.pack("16sH", name.encode(), IFF_TUN | IFF_NO_PI))
+if fd != 3:
+    os.dup2(fd, 3)
+    os.close(fd)
+os.set_inheritable(3, True)
+os.environ[var] = "3"
+os.execv(cmd[0], cmd)

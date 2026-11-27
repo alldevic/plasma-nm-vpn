@@ -1,0 +1,41 @@
+#!/bin/bash
+# run-core <sing-box|xray|xray-name|amneziawg-go> <config> [uuid]
+# Start a core as plasma-nm-vpn in the core sandbox on the persistent TUN pnv-<8 uuid chars>,
+# created here as root first, as the daemon will do. Run as root.
+# SIGKILL on stop: a core must not clean up the TUN, which belongs to the daemon.
+# CAPS overrides the core's capabilities ("" for none); EXTRA adds systemd-run arguments.
+set -euo pipefail
+
+core=$1 config=$2 uuid=${3:-1a2b3c4d-0000-4000-8000-000000000000}
+bin=${PNV_BIN:-/opt/pnv-proto/bin}
+here=$(dirname "$(readlink -f "$0")")
+tun=pnv-${uuid:0:8}
+
+ip link show "$tun" >/dev/null 2>&1 || ip tuntap add dev "$tun" mode tun user plasma-nm-vpn
+install -m 0755 "$here/tun-fd" "$bin/tun-fd"
+
+props=(
+  -p User=plasma-nm-vpn
+  -p KillSignal=SIGKILL
+  -p ProtectSystem=strict
+  -p ProtectHome=yes
+  -p PrivateTmp=yes
+  -p NoNewPrivileges=yes
+)
+case $core in
+  sing-box) caps=CAP_NET_ADMIN cmd=("$bin/sing-box" run -c "$config") ;;
+  # xray brings a TUN it opened by name down on exit; handed over as an fd, it leaves the link alone.
+  xray) caps= cmd=("$bin/tun-fd" "$tun" XRAY_TUN_FD "$bin/xray" run -c "$config") ;;
+  xray-name) caps=CAP_NET_ADMIN cmd=("$bin/xray" run -c "$config") ;;
+  amneziawg-go)
+    caps=CAP_NET_ADMIN
+    props+=(-p ReadWritePaths=/run/amneziawg)
+    cmd=("$bin/amneziawg-go" -f "$tun")
+    ;;
+  *) echo "unknown core $core" >&2; exit 2 ;;
+esac
+caps=${CAPS-$caps}
+props+=(-p "AmbientCapabilities=$caps" -p "CapabilityBoundingSet=$caps")
+
+# shellcheck disable=SC2086
+systemd-run --quiet --collect --unit="plasma-nm-vpn-core-$uuid" "${props[@]}" ${EXTRA:-} "${cmd[@]}"

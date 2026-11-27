@@ -1,0 +1,44 @@
+#!/bin/bash
+# Write the 0.4 core configs for the TUN pnv-1a2b3c4d into /etc/pnv-proto/0.4 (readable by
+# plasma-nm-vpn; ProtectHome hides the bench secrets). Needs a bench from proto/stand. Run as root.
+# STACK sets the sing-box tun stack (default system).
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+sec=$here/../stand/secrets
+out=/etc/pnv-proto/0.4
+tun=pnv-1a2b3c4d
+. "$sec/env"
+
+install -d -m 0750 -g plasma-nm-vpn "$out"
+cert=$(sed 's/.*/"&"/' "$sec/hy2.crt" | paste -sd,)
+
+cat > "$out/sing-box.json" <<EOF
+{
+  "log": {"level": "info"},
+  "inbounds": [{"type": "tun", "tag": "tun", "interface_name": "$tun", "address": ["198.18.0.1/30"],
+    "mtu": 1400, "auto_route": false, "stack": "${STACK:-system}"}],
+  "outbounds": [{"type": "hysteria2", "tag": "proxy", "server": "198.51.100.1", "server_port": 443,
+    "password": "$HY2_PASSWORD", "obfs": {"type": "salamander", "password": "$HY2_OBFS"},
+    "tls": {"enabled": true, "server_name": "srv.stand.test", "alpn": ["h3"], "certificate": [$cert]},
+    "bind_interface": "stand-cli"}],
+  "route": {"final": "proxy"}
+}
+EOF
+
+cat > "$out/xray.json" <<EOF
+{
+  "log": {"loglevel": "info"},
+  "inbounds": [{"tag": "tun", "port": 0, "protocol": "tun", "settings": {"name": "$tun", "mtu": 1400}}],
+  "outbounds": [{"protocol": "vless",
+    "settings": {"vnext": [{"address": "198.51.100.1", "port": 443, "users": [{"id": "$VLESS_UUID", "encryption": "none"}]}]},
+    "streamSettings": {"network": "xhttp", "xhttpSettings": {"path": "$VLESS_PATH"},
+      "security": "reality", "realitySettings": {"serverName": "www.stand.test", "fingerprint": "chrome",
+        "password": "$REALITY_PUBLIC", "shortId": "$VLESS_SHORT_ID"},
+      "sockopt": {"interface": "stand-cli"}}}]
+}
+EOF
+
+cp "$sec/client/awg-4.conf" "$out/awg.conf"
+chgrp plasma-nm-vpn "$out"/*
+chmod 0640 "$out"/*
