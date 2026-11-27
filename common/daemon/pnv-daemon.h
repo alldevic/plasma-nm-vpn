@@ -30,6 +30,12 @@ gboolean pnv_secret_needed(NMSettingVpn *s_vpn, const PnvSecret *secret);
 #define PNV_CORE_USER "plasma-nm-vpn"
 #define PNV_CACHE_DIR "/var/lib/plasma-nm-vpn"
 #define PNV_CONF "/etc/plasma-nm-vpn/plasma-nm-vpn.conf"
+#define PNV_DATA_DIR "/usr/share/plasma-nm-vpn"
+
+/* nftables (nft.c): the DNS and IPv6 guard of a default-route tunnel. */
+gboolean pnv_nft_run(const char *script, GError **error);
+gboolean pnv_guard_install(const char *uuid, GError **error);
+void pnv_guard_remove(const char *uuid);
 
 /* The server IP (server.c) and the TUN subnet (pool.c). */
 char *pnv_pick_server_ip(GList *v4, GList *v6);

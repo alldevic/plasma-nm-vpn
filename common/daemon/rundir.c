@@ -49,6 +49,14 @@ gboolean pnv_daemon_gone(const char *uuid)
     ok = pnv_unit_wait_down(core, 10000);
     pnv_tun_name(uuid, tun);
     pnv_tun_delete(tun);
+    pnv_guard_remove(uuid);
+#ifdef PNV_TEST_HOOKS
+    {
+        g_autofree char *script = g_strdup_printf("add table inet plasma_nm_vpn\n"
+                                                  "destroy chain inet plasma_nm_vpn test-%.8s\n", uuid);
+        pnv_nft_run(script, NULL);
+    }
+#endif
     pnv_run_dir_remove(run);
     return ok;
 }

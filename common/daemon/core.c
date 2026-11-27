@@ -66,6 +66,18 @@ static void delete_tun(PnvSession *s)
     pnv_tun_delete(s->tun);
 }
 
+static void remove_guard(PnvSession *s)
+{
+    pnv_guard_remove(s->uuid);
+}
+
+/* NM routes the default via the VPN unless the profile says never-default. */
+static gboolean default_route(PnvSession *s)
+{
+    NMSettingIPConfig *s_ip4 = nm_connection_get_setting_ip4_config(s->connection);
+    return !(s_ip4 && nm_setting_ip_config_get_never_default(s_ip4));
+}
+
 static void stop_core(PnvSession *s)
 {
     if (s->core_watch)
@@ -153,6 +165,7 @@ static gboolean cleanup_orphans(PnvSession *s, GError **error)
         pnv_message(s, "deleting the leftover interface %s", s->tun);
         pnv_tun_delete(s->tun);
     }
+    pnv_guard_remove(s->uuid);
     return TRUE;
 }
 
@@ -295,8 +308,19 @@ gboolean pnv_session_prepare(PnvSession *s, GError **error)
     if (!resolve(s, error) || !reserve_subnet(s, error))
         return FALSE;
     find_parent(s);
+    /* Removed after the TUN on disconnect, so they are registered first; installed after it, before the core. */
+    pnv_session_add_cleanup(s, "DNS and IPv6 guard", remove_guard);
     pnv_session_add_cleanup(s, "TUN", delete_tun);
-    return pnv_tun_create(s->tun, pnv_session_mtu(s), error);
+    if (!pnv_tun_create(s->tun, pnv_session_mtu(s), error))
+        return FALSE;
+    if (!default_route(s)) {
+        pnv_message(s, "never-default: no DNS and IPv6 guard");
+        return TRUE;
+    }
+    if (!pnv_guard_install(s->uuid, error))
+        return FALSE;
+    pnv_message(s, "DNS and IPv6 guard installed");
+    return TRUE;
 }
 
 static void core_changed(GDBusConnection *bus G_GNUC_UNUSED, const char *sender G_GNUC_UNUSED,
@@ -404,8 +428,7 @@ static GVariant *ip4(const char *text)
  * itself; the route to the gateway goes via the parent device. */
 void pnv_session_send_config(PnvSession *s)
 {
-    NMSettingIPConfig *s_ip4 = nm_connection_get_setting_ip4_config(s->connection);
-    gboolean never_default = s_ip4 && nm_setting_ip_config_get_never_default(s_ip4);
+    gboolean never_default = !default_route(s);
     const GPtrArray *dns = s->profile->dns;
     GVariantBuilder b, servers, routes;
     struct in6_addr a6;

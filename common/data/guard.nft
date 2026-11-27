@@ -1,0 +1,26 @@
+# The DNS and IPv6 guard of one default-route tunnel (design.md, "Leak protection"). The daemon substitutes
+# only @UUID@ (the profile UUID, canonical form) and feeds this to nft -f; nothing from the profile goes in.
+# "The tunnel" is any pnv-* interface: a reject in any base chain is final, so a narrower match here would
+# reject traffic correctly routed into another connection's tunnel.
+add table inet plasma_nm_vpn
+add chain inet plasma_nm_vpn guard-out-@UUID@ { type filter hook output priority filter; policy accept; }
+add chain inet plasma_nm_vpn guard-fwd-@UUID@ { type filter hook forward priority filter; policy accept; }
+
+# The core itself talks to the server over the parent device, IPv6 and all.
+add rule inet plasma_nm_vpn guard-out-@UUID@ meta skuid "plasma-nm-vpn" return
+add rule inet plasma_nm_vpn guard-out-@UUID@ oifname "lo" return
+
+# Neighbour discovery to any address (the kernel probes global addresses too), link-local and multicast.
+add rule inet plasma_nm_vpn guard-out-@UUID@ icmpv6 type { nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } return
+add rule inet plasma_nm_vpn guard-out-@UUID@ ip6 daddr { fe80::/10, ff00::/8 } return
+add rule inet plasma_nm_vpn guard-out-@UUID@ meta nfproto ipv6 oifname != "pnv-*" meta l4proto tcp counter reject with tcp reset
+add rule inet plasma_nm_vpn guard-out-@UUID@ meta nfproto ipv6 oifname != "pnv-*" counter reject
+add rule inet plasma_nm_vpn guard-out-@UUID@ oifname != "pnv-*" udp dport { 53, 853 } counter reject
+add rule inet plasma_nm_vpn guard-out-@UUID@ oifname != "pnv-*" tcp dport { 53, 853 } counter reject with tcp reset
+
+add rule inet plasma_nm_vpn guard-fwd-@UUID@ icmpv6 type { nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } return
+add rule inet plasma_nm_vpn guard-fwd-@UUID@ ip6 daddr { fe80::/10, ff00::/8 } return
+add rule inet plasma_nm_vpn guard-fwd-@UUID@ meta nfproto ipv6 oifname != "pnv-*" meta l4proto tcp counter reject with tcp reset
+add rule inet plasma_nm_vpn guard-fwd-@UUID@ meta nfproto ipv6 oifname != "pnv-*" counter reject
+add rule inet plasma_nm_vpn guard-fwd-@UUID@ oifname != "pnv-*" udp dport { 53, 853 } counter reject
+add rule inet plasma_nm_vpn guard-fwd-@UUID@ oifname != "pnv-*" tcp dport { 53, 853 } counter reject with tcp reset
