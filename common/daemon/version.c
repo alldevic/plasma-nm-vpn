@@ -3,5 +3,5 @@
 
 const char *pnv_version(void)
 {
-    return PNV_VERSION;
+    return PNV_VERSION   /* broken on purpose */
 }
