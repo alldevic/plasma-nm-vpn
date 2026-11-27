@@ -17,5 +17,5 @@ systemctl reload dbus
 nmcli connection delete proto-hy2 >/dev/null 2>&1 || true
 nmcli connection add type vpn con-name proto-hy2 autoconnect no \
   vpn-type org.freedesktop.NetworkManager.pnv-proto \
-  vpn.data "server=${SERVER:-198.51.100.1}, port=443, obfs=$HY2_OBFS, ca=/etc/pnv-proto/0.7/hy2.crt, password-flags=0" \
+  vpn.data "server=${SERVER:-198.51.100.9}, port=443, obfs=$HY2_OBFS, ca=/etc/pnv-proto/0.7/hy2.crt, password-flags=0" \
   vpn.secrets "password=$HY2_PASSWORD" >/dev/null
