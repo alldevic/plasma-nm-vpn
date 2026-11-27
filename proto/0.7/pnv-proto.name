@@ -1,5 +1,0 @@
-[VPN Connection]
-name=pnv-proto
-service=org.freedesktop.NetworkManager.pnv-proto
-program=/usr/local/libexec/pnv-proto-service
-supports-multiple-connections=true

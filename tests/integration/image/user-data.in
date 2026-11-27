@@ -18,11 +18,10 @@ packages:
   - iw
   - pkexec
   - openssh-server
-  # Building the 0.7 prototype for the smoke test (removed in 2.7).
-  - gcc
-  - make
-  - pkgconf
-  - libnm-dev
+  # The runtime dependencies of plasma-nm-vpn-common and -sb, so that the CI-built .deb files install
+  # offline once the bench has taken over the network (2.7).
+  - plasma-nm
+  - libjson-glib-1.0-0
 write_files:
   # QEMU wakes a guest on the RTC alarm only from S3 (0.2).
   - path: /etc/systemd/sleep.conf.d/pnv.conf

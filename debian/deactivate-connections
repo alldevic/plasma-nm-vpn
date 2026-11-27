@@ -20,7 +20,10 @@ while [ $i -lt 40 ]; do
     for uuid in $down; do
         systemctl is-active --quiet "plasma-nm-vpn-daemon-$uuid.scope" && left="$left $uuid"
     done
-    [ -n "$left" ] || exit 0
+    if [ -z "$left" ]; then
+        echo "plasma-nm-vpn: brought down$down, cleaned up after $((i / 2)) s"
+        exit 0
+    fi
     sleep 0.5
     i=$((i + 1))
 done

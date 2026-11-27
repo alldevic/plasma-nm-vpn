@@ -66,8 +66,24 @@ jobs:
         with:
           path: cores-staging
           key: ${{ steps.cores.outputs.cache-primary-key }}
+      # The packages as in the packages job (1.2), and the never-packaged test build of the daemons (2.1),
+      # which the harness puts over the packaged binaries only for the cases marked test_build.
+      - name: Packages and the test build
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src debian:forky sh -ec '
+            apt-get update -qq && apt-get install -y -qq --no-install-recommends dpkg-dev debhelper >/dev/null
+            apt-get build-dep -y -qq --no-install-recommends ./ >/dev/null
+            dpkg-buildpackage -b -us -uc >/dev/null && mkdir -p debs && mv ../*.deb debs/
+            cmake -S . -B /tmp/tb -DBUILD_EDITORS=OFF -DBUILD_TESTING=OFF -DPNV_TEST_HOOKS=ON \
+              -DCMAKE_INSTALL_PREFIX=/usr >/dev/null
+            cmake --build /tmp/tb >/dev/null && DESTDIR=/src/test-build cmake --install /tmp/tb >/dev/null
+            chown -R '"$(id -u):$(id -g)"' debs test-build'
+          scripts/check-no-test-hooks debs
+          ls debs
       - name: Run the cases
-        run: tests/integration/run.sh --dns-mode ${{ matrix.dns-mode }} --image image.qcow2 --cores cores-staging
+        run: |
+          tests/integration/run.sh --dns-mode ${{ matrix.dns-mode }} --image image.qcow2 --cores cores-staging \
+            --debs debs --test-build test-build
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
