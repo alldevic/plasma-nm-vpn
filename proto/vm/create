@@ -1,0 +1,35 @@
+#!/bin/bash
+# (Re)create the pnv-forky test VM from the Debian forky cloud image.
+# qemu:///session with passt user networking: nothing on the host network changes.
+set -euo pipefail
+
+name=pnv-forky
+uri=qemu:///session
+dir=${PNV_VM_DIR:-$HOME/.local/share/pnv-vm}
+key=${PNV_VM_KEY:-$HOME/.ssh/id_ed25519.pub}
+base=https://cloud.debian.org/images/cloud/forky/daily/latest
+img=debian-14-generic-amd64-daily.qcow2
+here=$(dirname "$(readlink -f "$0")")
+
+mkdir -p "$dir"
+cd "$dir"
+curl -fsSL -o "$img" -z "$img" "$base/$img"
+curl -fsSL -o SHA512SUMS "$base/SHA512SUMS"
+grep " $img\$" SHA512SUMS | sha512sum -c -
+
+virsh -c "$uri" destroy "$name" 2>/dev/null || true
+virsh -c "$uri" undefine "$name" --snapshots-metadata 2>/dev/null || true
+
+cp "$img" "$name.qcow2"
+qemu-img resize "$name.qcow2" 40G
+sed "s|@KEY@|$(cat "$key")|" "$here/user-data" > user-data
+# Own seed: virt-install --cloud-init deletes its temporary ISO before the guest reads it.
+cloud-localds seed.iso user-data
+
+# S3 enabled: QEMU wakes a guest on the RTC alarm only from S3, not from s2idle.
+virt-install --connect "$uri" --name "$name" \
+  --memory 6144 --vcpus 4 --cpu host-passthrough --osinfo debiantesting \
+  --import --disk "$name.qcow2,bus=virtio" --disk seed.iso,device=cdrom \
+  --network passt,portForward0.proto=tcp,portForward0.address=127.0.0.1,portForward0.range0.start=2222,portForward0.range0.to=22 \
+  --pm suspend_to_mem.enabled=on \
+  --graphics vnc,listen=127.0.0.1 --video virtio --noautoconsole

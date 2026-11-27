@@ -94,7 +94,7 @@ NM starts the daemon; the daemon validates the profile fields, generates the cor
 | `plasma-nm-vpn-common` | shared daemon library; shared editor widgets (Qt/KF6, without plasma-nm's internal API); the `plasma-nm-vpn` user; nftables templates; `plasma-nm-vpn-guard` and its polkit action | `network-manager`, `nftables`, `pkexec` |
 | `plasma-nm-vpn-sb`, `plasma-nm-vpn-xray`, `plasma-nm-vpn-amneziawg` | core binary in `/usr/lib/plasma-nm-vpn/bin/`, daemon, `.name`, editors (`VpnUiPlugin`), config templates and key allowlists for this core version | `plasma-nm-vpn-common (= <project version>)` (the shared library is private); `plasma-nm (>= 4:6.0), plasma-nm (<< 4:7)` |
 
-The new packages add almost no system dependencies. nftables has priority `important` and is present in any Debian installation, and json-glib (for JSON generation in the daemons) is pulled in by `xdg-desktop-portal`, which is mandatory for KDE (verified on forky). `pkexec` is a small separate package split out of polkit; whether a stock forky KDE install already has it is checked in milestone 0.2.
+The new packages add almost no system dependencies. nftables has priority `important` and is present in any Debian installation, and json-glib (for JSON generation in the daemons) is pulled in by `xdg-desktop-portal`, which is mandatory for KDE (verified on forky). `pkexec` is a small separate package split out of polkit, and a stock forky KDE install (`task-kde-desktop`) does not have it (checked on 2026-11-27, milestone 0.2), so it is the one new system dependency.
 
 **Removal and upgrades.** On `remove` (not on `upgrade`), the `prerm` of a core package deactivates that package's active VPN connections and waits up to 20 s for their daemon scopes to go away (then warns and continues, so removal is never blocked), and the `prerm` of `plasma-nm-vpn-common` also removes all of our nftables chains and `guard-status`, so that removing the packages never leaves a block without a tool to clear it. An upgrade does not touch running connections: the run-directory markers and the `guard-status` format carry a version, and the new code reads the previous one. A core-only release (for example `0.1.0+sb1.14.5`) is built from the release branch of the current project version, not from `main`, so that it matches the published `plasma-nm-vpn-common`.
 
@@ -333,17 +333,17 @@ Phase 2: `Ip6Config`, a ULA address on the TUN.
   - known attack vectors via the profile: wg-quick hooks, paths in `extra`, line breaks.
 - The build, unit tests and integration tests run on every pull request and on every core and plasma-nm update; fuzzing runs on a schedule.
 - The UI is tested manually against a checklist.
-- Sleep is tested in the VM and in CI with a real `systemctl suspend` in s2idle mode woken by `rtcwake`, so that logind itself emits `PrepareForSleep` (the daemon accepts the signal only from logind); suspend on real hardware is checked on the hardware test machine if one is available.
+- Sleep is tested in the VM and in CI with a real `systemctl suspend` woken by `rtcwake`, so that logind itself emits `PrepareForSleep` (the daemon accepts the signal only from logind). The VM sleeps in S3 (`deep`: libvirt `suspend-to-mem` enabled, `MemorySleepMode=deep`), because QEMU wakes a guest on the RTC alarm only from S3; in s2idle the alarm does not count as a wakeup and only host input (`virsh send-key`) wakes the guest (checked in 0.2). For the daemon both modes are the same logind and NM sequence; s2idle and suspend on real hardware are checked on the hardware test machine if one is available.
 - All networking experiments and tests run only in a test VM, in CI or on a separate hardware test machine, never on a work machine. A hardware test machine with real Wi-Fi (ssh access) is used for MVP acceptance, if one is available.
 
 ## MVP acceptance criteria
 
-- The packages install on a clean Debian forky with KDE from the project's public repository following the README instructions; there are no new dependencies other than our packages (and `pkexec`, if milestone 0.2 found it missing from a stock install).
+- The packages install on a clean Debian forky with KDE from the project's public repository following the README instructions; there are no new dependencies other than our packages and `pkexec`.
 - The repository has a README (in English and Russian), LICENSE, `SECURITY.md` and information on the core licenses; the UI is translated into Russian.
 - A profile for each of the three protocols can be created in plasma-nm both manually and by import; it connects and disconnects from the applet.
 - There are no secrets in `vpn.data`; a profile from an unprivileged user does not allow executing code or reading and writing files as root.
 - No DNS and IPv6 leaks with a default-route tunnel; with the kill switch, traffic does not go directly when the tunnel goes down.
-- The connection recovers after switching Wi-Fi ↔ Ethernet and after sleep (the acceptable time is set based on the results of milestone 5.8; Wi-Fi: emulation in the VM, sleep: s2idle suspend in the VM; both also on the hardware test machine, if available).
+- The connection recovers after switching Wi-Fi ↔ Ethernet and after sleep (the acceptable time is set based on the results of milestone 5.8; Wi-Fi: emulation in the VM, sleep: S3 suspend in the VM; both also on the hardware test machine, if available).
 - After a disconnect or an abnormal termination, no interfaces, routes, rules, units or processes are left in the system, except for kill switch chains and their `guard-status` entry in the cases described above. The run directory `/run/plasma-nm-vpn/<uuid>/` is removed too, by the daemon on disconnect or by `--daemon-gone` after a crash.
 
 ## Research findings

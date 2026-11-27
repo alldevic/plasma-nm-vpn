@@ -1,0 +1,34 @@
+pnv-forky, snapshot "clean", 2026-11-27
+image: debian-14-generic-amd64-daily.qcow2 (cloud.debian.org, forky daily), task-kde-desktop 3.92
+
+kernel           7.3.5+deb14-amd64
+network-manager  1.58.1-1+b1
+plasma-nm        4:6.7.4-2+b1
+qt6-base-dev     6.11.2+dfsg-8 (libqt6core6t64 6.11.2+dfsg-8)
+systemd          262.2-1
+apt              3.3.7
+nftables         1.1.7-3
+
+pkexec: not installed in a stock install (task-kde-desktop); only rtkit
+  references it (rdepends --installed), so it is a new dependency for users.
+
+DNS: resolv.conf mode. The cloud image ships netplan, systemd-networkd and
+  systemd-resolved; user-data purges them, so NM manages enp1s0 and writes
+  /etc/resolv.conf, as on a desktop install. Snapshot "resolved" adds
+  systemd-resolved back.
+
+Wi-Fi: modprobe mac80211_hwsim radios=2 -> wlan0, wlan1, hwsim0.
+
+Sleep: S3 (deep). libvirt <suspend-to-mem enabled='yes'/>, MemorySleepMode=deep
+  in /etc/systemd/sleep.conf.d/pnv.conf; /dev/rtc0 present.
+  rtcwake -m no -s 20 && systemctl suspend -> domain pmsuspended, wakes by
+  itself ("event wakeup"), logind and NM log sleep/wake.
+  s2idle (libvirt default, S3 off): the RTC alarm fires (IRQ 8) but does not
+  wake the guest, since rtc_cmos wakes through the ACPI fixed RTC event, which
+  QEMU raises only on wake from S3; only host input (virsh send-key) wakes it.
+  After an S3 resume, poweroff hangs at the final step (after systemd-shutdown
+  syncs and stops everything); a plain poweroff takes 4 s. vm-reset uses
+  virsh destroy, so tests are not affected.
+
+Host: qemu:///session, passt user networking, ssh 127.0.0.1:2222, VNC on
+  127.0.0.1. No vsock yet: /dev/vhost-vsock needs group kvm.

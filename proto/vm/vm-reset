@@ -1,0 +1,11 @@
+#!/bin/bash
+# Revert pnv-forky to a snapshot (default: clean) and start it.
+set -euo pipefail
+
+name=pnv-forky
+uri=qemu:///session
+snap=${1:-clean}
+
+virsh -c "$uri" destroy "$name" 2>/dev/null || true
+virsh -c "$uri" snapshot-revert "$name" "$snap" --force
+virsh -c "$uri" start "$name"

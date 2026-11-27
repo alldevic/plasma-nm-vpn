@@ -1,0 +1,37 @@
+#cloud-config
+hostname: pnv-forky
+users:
+  - name: pnv
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    plain_text_passwd: pnv
+    ssh_authorized_keys: ["@KEY@"]
+package_update: true
+package_upgrade: true
+write_files:
+  # QEMU wakes a guest on the RTC alarm only from S3, not from s2idle.
+  - path: /etc/systemd/sleep.conf.d/pnv.conf
+    content: |
+      [Sleep]
+      MemorySleepMode=deep
+runcmd:
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y task-kde-desktop openssh-server
+  # 0.2: is pkexec part of a stock KDE install, and what pulls it in?
+  - sh -c '{ dpkg-query -W -f="\${Status}\n" pkexec 2>/dev/null || echo "not installed"; apt-cache rdepends --installed pkexec; } > /root/pkexec-stock.txt'
+  - >-
+    DEBIAN_FRONTEND=noninteractive apt-get install -y
+    build-essential cmake pkgconf git rsync
+    libnm-dev libglib2.0-dev libjson-glib-dev
+    qt6-base-dev extra-cmake-modules libkf6coreaddons-dev libkf6widgetsaddons-dev libkf6i18n-dev libkf6networkmanagerqt-dev
+    tcpdump bind9-dnsutils dnsmasq-base python3 curl openssl nftables iproute2 iw hostapd
+    dpkg-dev apt-utils gnupg
+  - systemctl set-default graphical.target
+  # Networking as on a desktop install: NM owns the uplink and /etc/resolv.conf. Last, since it drops DNS until reboot.
+  - DEBIAN_FRONTEND=noninteractive apt-get purge -y netplan.io netplan-generator python3-netplan systemd-resolved libnss-resolve
+  - systemctl disable systemd-networkd.service systemd-networkd.socket systemd-networkd-wait-online.service
+  - rm -f /etc/resolv.conf /etc/netplan/50-cloud-init.yaml
+  - touch /etc/cloud/cloud-init.disabled
+power_state:
+  mode: reboot
