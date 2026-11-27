@@ -21,7 +21,8 @@ typedef struct {
     gboolean (*connect)(PnvSession *session, GError **error);
 } PnvProtocol;
 
-/* Needed (its `when` key is set), not in vpn.secrets, and its <key>-flags do not say NOT_REQUIRED. */
+/* Needed (its `when` key is set; an optional one has <key>-flags), not in vpn.secrets, and its <key>-flags do
+ * not say NOT_REQUIRED. */
 gboolean pnv_secret_needed(NMSettingVpn *s_vpn, const PnvSecret *secret);
 
 #define PNV_RUN_DIR "/run/plasma-nm-vpn"

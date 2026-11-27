@@ -315,7 +315,7 @@ static void test_list_file(void)
 {
     g_auto(PnvProblem) p = {0};
     g_autoptr(PnvList) list = pnv_list_parse("# c\n\n  chrome  \nfirefox\nchrome\n", "fp", &p);
-    g_autoptr(PnvList) bad = pnv_list_parse("ok\n\nnot ok\n", "fp", &p);
+    g_autoptr(PnvList) bad = pnv_list_parse("ok\n\nnot/ok\n", "fp", &p);
 
     g_assert_nonnull(list);
     g_assert_cmpuint(list->entries->len, ==, 2);

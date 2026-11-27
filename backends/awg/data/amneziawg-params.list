@@ -1,0 +1,28 @@
+# AmneziaWG interface parameters a profile may set, amneziawg-tools v3.1.20260812 (src/config.c, src/type.c):
+# vpn.data key, key in the awg config, type. Types: uint16 (0-65535); u16range and u32range (N or N-M,
+# N <= M); onoff (on or off); chain (an I1-I5 tag chain, printable ASCII, parsed by amneziawg-go).
+# HeaderProtectionKey is not here: it is the secret awg-headerprotectionkey.
+awg-jc Jc uint16
+awg-jmin Jmin uint16
+awg-jmax Jmax uint16
+awg-s1 S1 uint16
+awg-s2 S2 uint16
+awg-s3 S3 uint16
+awg-s4 S4 uint16
+awg-h1 H1 u32range
+awg-h2 H2 u32range
+awg-h3 H3 u32range
+awg-h4 H4 u32range
+awg-i1 I1 chain
+awg-i2 I2 chain
+awg-i3 I3 chain
+awg-i4 I4 chain
+awg-i5 I5 chain
+awg-contentpaddingaddition ContentPaddingAddition u16range
+awg-rekeyaftertime RekeyAfterTime u16range
+awg-rekeytimeout RekeyTimeout u16range
+awg-rejectaftertime RejectAfterTime u16range
+awg-keepalivetimeout KeepaliveTimeout u16range
+awg-maxhandshakeattempts MaxHandshakeAttempts u16range
+awg-randomtrailers RandomTrailers onoff
+awg-disablecookies DisableCookies onoff

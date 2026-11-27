@@ -14,3 +14,7 @@ add_executable(test-sb-config test_sb_config.c)
 target_link_libraries(test-sb-config PRIVATE pnv-sb-config)
 add_test(NAME sb-config COMMAND test-sb-config ${PROJECT_SOURCE_DIR}/backends/sb/data/hysteria2.json
          ${PROJECT_SOURCE_DIR}/backends/sb/data/hysteria2-extra.list ${PROJECT_SOURCE_DIR}/tests/golden/sing-box-1.14.5)
+
+add_executable(test-awg-profile test_awg_profile.c)
+target_link_libraries(test-awg-profile PRIVATE pnv-profile)
+add_test(NAME awg-profile COMMAND test-awg-profile ${PROJECT_SOURCE_DIR}/backends/awg/data/amneziawg-params.list)

@@ -10,6 +10,10 @@
 static gboolean needed(NMSettingVpn *s_vpn, const PnvSecret *secret)
 {
     const char *when = secret->when ? nm_setting_vpn_get_data_item(s_vpn, secret->when) : NULL;
+    g_autofree char *flags_key = g_strconcat(secret->key, "-flags", NULL);
+
+    if (secret->optional && !nm_setting_vpn_get_data_item(s_vpn, flags_key))
+        return FALSE;
     return !secret->when || (when && *when);
 }
 

@@ -17,6 +17,10 @@ typedef enum {
     T_IP4_LIST,
     T_SECRET,
     T_EXTRA,
+    T_PORT,
+    T_KEY32,
+    T_CIDR4_LIST,
+    T_AWG_PARAM,
 } FieldType;
 
 typedef struct {
@@ -24,7 +28,7 @@ typedef struct {
     FieldType type;
     gsize offset;
     gboolean required;
-    guint min, max; /* T_UINT bounds; T_SECRET maximum length */
+    guint min, max; /* T_UINT bounds; T_SECRET maximum length; T_CIDR4_LIST maximum entries */
 } Field;
 
 #define AT(member) offsetof(PnvProfile, member)
@@ -64,15 +68,43 @@ static const PnvSecret hysteria2_secrets[] = {
     {NULL},
 };
 
+static const Field amneziawg_fields[] = {
+    {"port", T_PORT, AT(amneziawg.port), TRUE},
+    {"address", T_CIDR4_LIST, AT(amneziawg.address), TRUE, 0, 8},
+    {"peer-public-key", T_KEY32, AT(amneziawg.peer_public_key), TRUE},
+    {"allowed-ips", T_CIDR4_LIST, AT(amneziawg.allowed_ips), TRUE, 0, 64},
+    {"keepalive", T_UINT, AT(amneziawg.keepalive), FALSE, 0, 65535},
+    {NULL},
+};
+
+static const Field amneziawg_secret_fields[] = {
+    {"private-key", T_KEY32, AT(amneziawg.private_key)},
+    {"preshared-key", T_KEY32, AT(amneziawg.preshared_key)},
+    {"awg-headerprotectionkey", T_KEY32, AT(amneziawg.header_protection_key)},
+    {NULL},
+};
+
+static const PnvSecret amneziawg_secrets[] = {
+    {"private-key", "Private key", NULL, FALSE},
+    {"preshared-key", "Preshared key", NULL, TRUE},
+    {"awg-headerprotectionkey", "Header protection key", NULL, TRUE},
+    {NULL},
+};
+
+/* awg-<parameter> keys, checked against the allowlist entry "awg-<parameter> <config key> <type>". */
+static const Field awg_param = {NULL, T_AWG_PARAM, AT(amneziawg.params)};
+
 typedef struct {
     const char *service;
     const Field *fields;
     const Field *secret_fields;
     const PnvSecret *secrets;
+    const char *param_prefix; /* data keys with this prefix are allowlisted parameters */
 } Protocol;
 
 static const Protocol protocols[] = {
-    {PNV_SERVICE_HYSTERIA2, hysteria2_fields, hysteria2_secret_fields, hysteria2_secrets},
+    {PNV_SERVICE_HYSTERIA2, hysteria2_fields, hysteria2_secret_fields, hysteria2_secrets, NULL},
+    {PNV_SERVICE_AMNEZIAWG, amneziawg_fields, amneziawg_secret_fields, amneziawg_secrets, "awg-"},
 };
 
 /* Upgrades vpn.data in place from schema `from` to from + 1; entry i handles schema i + 1. None yet. */
@@ -110,10 +142,62 @@ static const Field *find_in(const Field *fields, const char *key)
     return NULL;
 }
 
-static const Field *find_data_field(const Protocol *protocol, const char *key)
+static const Field *find_data_field(const Protocol *protocol, const char *key, const PnvList *allowlist)
 {
     const Field *f = find_in(common_fields, key);
-    return f ? f : find_in(protocol->fields, key);
+
+    if (!f)
+        f = find_in(protocol->fields, key);
+    if (!f && protocol->param_prefix && g_str_has_prefix(key, protocol->param_prefix) &&
+        pnv_list_contains(allowlist, key))
+        f = &awg_param;
+    return f;
+}
+
+static void param_free(gpointer data)
+{
+    PnvAwgParam *param = data;
+    g_free(param->key);
+    g_free(param->value);
+    g_free(param);
+}
+
+/* N or N-M within 0..max, N <= M. */
+static gboolean parse_range(const char *key, const char *value, guint max, PnvProblem *p)
+{
+    g_auto(GStrv) ends = g_strsplit(value, "-", 3);
+    guint lo, hi;
+
+    if (!ends[0] || (ends[1] && ends[2]))
+        return fail(p, PNV_E_BAD_NUMBER, key, NULL, 0, max);
+    if (!pnv_parse_uint(key, ends[0], 0, max, &lo, p) || (ends[1] && !pnv_parse_uint(key, ends[1], 0, max, &hi, p)))
+        return FALSE;
+    if (ends[1] && hi < lo)
+        return fail(p, PNV_E_BAD_PORT_RANGE, key, NULL, 0, max);
+    return TRUE;
+}
+
+/* Types of the AmneziaWG allowlist (amneziawg-tools v3.1 src/config.c and type.c). */
+static gboolean check_param(const char *key, const char *type, const char *value, PnvProblem *p)
+{
+    guint n;
+
+    if (g_strcmp0(type, "uint16") == 0)
+        return pnv_parse_uint(key, value, 0, 65535, &n, p);
+    if (g_strcmp0(type, "u16range") == 0)
+        return parse_range(key, value, 65535, p);
+    if (g_strcmp0(type, "u32range") == 0)
+        return parse_range(key, value, G_MAXUINT32, p);
+    if (g_strcmp0(type, "onoff") == 0)
+        return g_str_equal(value, "on") || g_str_equal(value, "off") ? TRUE : fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+    if (g_strcmp0(type, "chain") == 0) {
+        /* Tag chains like <b 0x...><r 16>: printable ASCII, parsed by amneziawg-go. */
+        for (const char *c = value; *c; c++)
+            if ((guchar)*c < 0x20 || (guchar)*c > 0x7e)
+                return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+        return TRUE;
+    }
+    return fail(p, PNV_E_LIST_ENTRY, key, NULL, 0, 0);
 }
 
 /* "<secret>-flags": NM's NMSettingSecretFlags, 0–7. */
@@ -124,57 +208,84 @@ static const Field *flags_of(const Protocol *protocol, const char *key)
 }
 
 /* Validates one value (already known not to be empty) and stores it in the profile. */
-static gboolean apply(const Field *f, const char *value, const PnvList *extra_allowed, PnvProfile *profile,
-                      PnvProblem *p)
+static gboolean apply(const Field *f, const char *key, const char *value, const PnvList *allowlist,
+                      PnvProfile *profile, PnvProblem *p)
 {
     void *at = (char *)profile + f->offset;
+    gsize max = f->type == T_EXTRA ? 8192 : f->type == T_SECRET ? f->max : f->type == T_AWG_PARAM ? 4096 : 255;
 
-    if (!pnv_check_string(f->key, value, f->type == T_EXTRA ? 8192 : f->type == T_SECRET ? f->max : 255, p))
+    if (!pnv_check_string(key, value, max, p))
         return FALSE;
     switch (f->type) {
     case T_UINT:
-        return pnv_parse_uint(f->key, value, f->min, f->max, at, p);
+        return pnv_parse_uint(key, value, f->min, f->max, at, p);
     case T_BOOL:
-        return pnv_parse_bool(f->key, value, at, p);
+        return pnv_parse_bool(key, value, at, p);
     case T_HOST:
-        if (!pnv_check_host(f->key, value, p))
+        if (!pnv_check_host(key, value, p))
             return FALSE;
         g_free(*(char **)at);
         *(char **)at = g_strdup(value);
         return TRUE;
     case T_SNI:
         /* A name, never an address literal: TLS sends no SNI for those. */
-        if (!pnv_check_host(f->key, value, p))
+        if (!pnv_check_host(key, value, p))
             return FALSE;
         if (g_hostname_is_ip_address(value))
-            return fail(p, PNV_E_BAD_HOST, f->key, NULL, 0, 0);
+            return fail(p, PNV_E_BAD_HOST, key, NULL, 0, 0);
         g_free(*(char **)at);
         *(char **)at = g_strdup(value);
         return TRUE;
     case T_PORTS:
         g_clear_pointer((GArray **)at, g_array_unref);
-        return pnv_parse_ports(f->key, value, at, p);
+        return pnv_parse_ports(key, value, at, p);
     case T_OBFS:
         if (strcmp(value, "salamander") != 0)
-            return fail(p, PNV_E_BAD_ENUM, f->key, NULL, 0, 0);
+            return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
         *(gboolean *)at = TRUE;
         return TRUE;
     case T_ALPN:
         g_clear_pointer((GPtrArray **)at, g_ptr_array_unref);
-        return pnv_parse_alpn(f->key, value, at, p);
+        return pnv_parse_alpn(key, value, at, p);
     case T_SHA256_HEX:
         g_clear_pointer((GBytes **)at, g_bytes_unref);
-        return pnv_parse_hex(f->key, value, 32, at, p);
+        return pnv_parse_hex(key, value, 32, at, p);
     case T_IP4_LIST:
         g_clear_pointer((GPtrArray **)at, g_ptr_array_unref);
-        return pnv_parse_ip4_list(f->key, value, f->max, at, p);
+        return pnv_parse_ip4_list(key, value, f->max, at, p);
     case T_SECRET:
         g_free(*(char **)at);
         *(char **)at = g_strdup(value);
         return TRUE;
     case T_EXTRA:
         g_clear_pointer((JsonObject **)at, json_object_unref);
-        return pnv_parse_extra(f->key, value, extra_allowed, at, p);
+        return pnv_parse_extra(key, value, allowlist, at, p);
+    case T_PORT:
+        return pnv_parse_port(key, value, at, p);
+    case T_KEY32:
+        if (!pnv_parse_base64(key, value, 32, NULL, p))
+            return FALSE;
+        g_free(*(char **)at);
+        *(char **)at = g_strdup(value);
+        return TRUE;
+    case T_CIDR4_LIST:
+        g_clear_pointer((GArray **)at, g_array_unref);
+        return pnv_parse_cidr4_list(key, value, f->max, at, p);
+    case T_AWG_PARAM: {
+        const char *const *fields = pnv_list_fields(allowlist, key);
+        PnvAwgParam *param;
+
+        if (!fields || !fields[0] || !fields[1])
+            return fail(p, PNV_E_UNKNOWN_KEY, key, NULL, 0, 0);
+        if (!check_param(key, fields[1], value, p))
+            return FALSE;
+        if (!*(GPtrArray **)at)
+            *(GPtrArray **)at = g_ptr_array_new_with_free_func(param_free);
+        param = g_new(PnvAwgParam, 1);
+        *param = (PnvAwgParam){g_strdup(fields[0]), g_strdup(value)};
+        g_ptr_array_add(*(GPtrArray **)at, param);
+        return TRUE;
+    }
     }
     g_assert_not_reached();
 }
@@ -190,6 +301,14 @@ static PnvProfile *profile_new(const char *service)
     return profile;
 }
 
+/* Secrets are wiped before they are freed. */
+static void wipe(char *secret)
+{
+    if (secret)
+        explicit_bzero(secret, strlen(secret));
+    g_free(secret);
+}
+
 void pnv_profile_free(PnvProfile *profile)
 {
     if (!profile)
@@ -201,12 +320,15 @@ void pnv_profile_free(PnvProfile *profile)
     g_free(profile->hysteria2.tls_sni);
     g_clear_pointer(&profile->hysteria2.tls_alpn, g_ptr_array_unref);
     g_clear_pointer(&profile->hysteria2.tls_pin_sha256, g_bytes_unref);
-    if (profile->hysteria2.password)
-        explicit_bzero(profile->hysteria2.password, strlen(profile->hysteria2.password));
-    g_free(profile->hysteria2.password);
-    if (profile->hysteria2.obfs_password)
-        explicit_bzero(profile->hysteria2.obfs_password, strlen(profile->hysteria2.obfs_password));
-    g_free(profile->hysteria2.obfs_password);
+    wipe(profile->hysteria2.password);
+    wipe(profile->hysteria2.obfs_password);
+    g_clear_pointer(&profile->amneziawg.address, g_array_unref);
+    g_free(profile->amneziawg.peer_public_key);
+    g_clear_pointer(&profile->amneziawg.allowed_ips, g_array_unref);
+    g_clear_pointer(&profile->amneziawg.params, g_ptr_array_unref);
+    wipe(profile->amneziawg.private_key);
+    wipe(profile->amneziawg.preshared_key);
+    wipe(profile->amneziawg.header_protection_key);
     g_free(profile);
 }
 
@@ -247,17 +369,19 @@ static gboolean check_schema(GHashTable *data, guint *schema, PnvProblem *p)
     return TRUE;
 }
 
-/* Required fields are all pointers: set means not NULL. */
+/* Required fields are pointers (set means not NULL) or ports (set means not 0). */
 static gboolean check_required(const Field *fields, PnvProfile *profile, PnvProblem *p)
 {
-    for (const Field *f = fields; f->key; f++)
-        if (f->required && !*(void **)((char *)profile + f->offset))
+    for (const Field *f = fields; f->key; f++) {
+        void *at = (char *)profile + f->offset;
+        if (f->required && (f->type == T_PORT ? *(guint16 *)at == 0 : *(void **)at == NULL))
             return fail(p, PNV_E_MISSING, f->key, NULL, 0, 0);
+    }
     return TRUE;
 }
 
 PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable *secrets,
-                              const PnvList *extra_allowed, PnvProblem *p)
+                              const PnvList *allowlist, PnvProblem *p)
 {
     const Protocol *protocol = find_protocol(service);
     g_autoptr(PnvProfile) profile = NULL;
@@ -288,12 +412,12 @@ PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable 
             }
             continue;
         }
-        f = find_data_field(protocol, key);
+        f = find_data_field(protocol, key, allowlist);
         if (!f) {
             fail(p, PNV_E_UNKNOWN_KEY, key, NULL, 0, 0);
             return NULL;
         }
-        if (*value && !apply(f, value, extra_allowed, profile, p))
+        if (*value && !apply(f, key, value, allowlist, profile, p))
             return NULL;
     }
     secret_keys = sorted_keys(secrets);
@@ -305,7 +429,7 @@ PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable 
             fail(p, PNV_E_UNKNOWN_SECRET, key, NULL, 0, 0);
             return NULL;
         }
-        if (*value && !apply(f, value, NULL, profile, p))
+        if (*value && !apply(f, key, value, NULL, profile, p))
             return NULL;
     }
     profile->schema = schema;
@@ -315,7 +439,7 @@ PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable 
         const char *when = s->when && data ? g_hash_table_lookup(data, s->when) : NULL;
         const Field *f = find_in(protocol->secret_fields, s->key);
 
-        if ((!s->when || (when && *when)) && !*(char **)((char *)profile + f->offset)) {
+        if (!s->optional && (!s->when || (when && *when)) && !*(char **)((char *)profile + f->offset)) {
             fail(p, PNV_E_MISSING, s->key, NULL, 0, 0);
             return NULL;
         }
@@ -323,7 +447,7 @@ PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable 
     return g_steal_pointer(&profile);
 }
 
-gboolean pnv_check_field(const char *service, const char *key, const char *value, const PnvList *extra_allowed,
+gboolean pnv_check_field(const char *service, const char *key, const char *value, const PnvList *allowlist,
                          PnvProblem *p)
 {
     const Protocol *protocol = find_protocol(service);
@@ -335,7 +459,7 @@ gboolean pnv_check_field(const char *service, const char *key, const char *value
         return fail(p, PNV_E_UNKNOWN_SERVICE, NULL, service, 0, 0);
     if (strcmp(key, "schema") == 0)
         return pnv_check_string(key, value, 16, p) && pnv_parse_uint(key, value, 1, PNV_SCHEMA_VERSION, &n, p);
-    f = find_data_field(protocol, key);
+    f = find_data_field(protocol, key, allowlist);
     if (!f)
         f = find_in(protocol->secret_fields, key);
     if (!f)
@@ -343,5 +467,5 @@ gboolean pnv_check_field(const char *service, const char *key, const char *value
     if (!*value)
         return f->required ? fail(p, PNV_E_MISSING, key, NULL, 0, 0) : TRUE;
     scratch = profile_new(protocol->service);
-    return apply(f, value, extra_allowed, scratch, p);
+    return apply(f, key, value, allowlist, scratch, p);
 }
