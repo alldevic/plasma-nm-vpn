@@ -20,6 +20,8 @@ def cursor():
 
 
 def journal(after, *args):
+    """The journal since the cursor; --sync first, so that every message written before the call is in it."""
+    sh("journalctl --sync", timeout=30)
     return sh(f"journalctl --after-cursor '{after}' --no-pager -o cat {' '.join(args)}", timeout=30)
 
 
