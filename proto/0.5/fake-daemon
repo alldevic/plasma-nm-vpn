@@ -1,7 +1,7 @@
 #!/bin/bash
 # fake-daemon <uuid>: stands in for the daemon's Connect. Calls systemd over D-Bus as the C code will.
 # SIGTERM: synchronous disconnect. SIGUSR1: recreate the core unit only (a reconnect). Run as root.
-# Needs the bench (proto/stand) and the 0.4 configs (proto/0.4/make-configs).
+# Needs the bench (tests/integration/stand) and the 0.4 configs (proto/0.4/make-configs).
 set -euo pipefail
 
 uuid=$1

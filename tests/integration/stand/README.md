@@ -3,7 +3,7 @@
 Servers for the MVP protocols and the network around them, in the test VM (or CI). Never on a work machine: `stand-up` takes over the default route and DNS.
 
 ```
-sudo ./fetch-cores          # once: sing-box, xray, amneziawg-go, awg into /opt/pnv-proto/bin (needs Go >= 1.25)
+scripts/fetch-cores <dir> && sudo install -D -t /opt/pnv-proto/bin <dir>/bin/*   # the cores pinned in cores/
 sudo ./stand-up [hy2|vless|awg|all]
 sudo ./stand-down
 ```
@@ -57,4 +57,4 @@ sudo ip route add 203.0.113.0/24 dev awg-cli && curl http://203.0.113.1/
 - The Reality target is `tls-target`, a threaded TLS 1.3 server: `openssl s_server` takes seconds for the first handshake and serves one connection at a time.
 - AWG has one peer per address family (`-4` and `-6` keys): when one peer switches family, amneziawg-go loses its first handshake response and the client waits 5 s for the retry. Rarely (about 1 in 15 runs) the first handshake still takes 5 s; tests allow for one retry.
 - AWG uses 3.1 parameters. With `HeaderProtectionKey`, S1–S4 must be at least 12; Jmin must not exceed Jmax.
-- Tools: iproute2, nftables, NetworkManager, dnsmasq-base, python3, openssl, curl, bind9-dnsutils; for `fetch-cores` also git, make, gcc, unzip and golang-go.
+- Tools: iproute2, nftables, NetworkManager, dnsmasq-base, python3, openssl, curl, bind9-dnsutils; `scripts/fetch-cores` (run where the cores are built) needs git, make, gcc, unzip and golang-go.

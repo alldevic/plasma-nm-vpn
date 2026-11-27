@@ -6,3 +6,6 @@
 /debian/files
 /debian/*.substvars
 /debian/plasma-nm-vpn*/
+/vm-state/
+/integration-out/
+/*.qcow2

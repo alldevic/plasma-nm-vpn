@@ -1,6 +1,6 @@
 #!/bin/bash
 # Copy the working tree (without .git) to ~/plasma-nm-vpn in pnv-forky.
 here=$(dirname "$(readlink -f "$0")")
-exec rsync -a --delete --exclude=.git --exclude=/proto/stand/secrets --exclude=/cores-staging --exclude=/build --exclude=/obj-* \
+exec rsync -a --delete --exclude=.git --exclude=/tests/integration/stand/secrets --exclude=/cores-staging --exclude=/build --exclude=/obj-* \
   -e "ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR" \
   "$here/../../" pnv@127.0.0.1:plasma-nm-vpn/

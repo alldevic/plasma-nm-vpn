@@ -1,11 +1,11 @@
 #!/bin/bash
 # Write the 0.4 core configs for the TUN pnv-1a2b3c4d into /etc/pnv-proto/0.4 (readable by
-# plasma-nm-vpn; ProtectHome hides the bench secrets). Needs a bench from proto/stand. Run as root.
+# plasma-nm-vpn; ProtectHome hides the bench secrets). Needs a bench from tests/integration/stand. Run as root.
 # STACK sets the sing-box tun stack (default system).
 set -euo pipefail
 
 here=$(dirname "$(readlink -f "$0")")
-sec=$here/../stand/secrets
+sec=$here/../../tests/integration/stand/secrets
 out=/etc/pnv-proto/0.4
 tun=pnv-1a2b3c4d
 . "$sec/env"

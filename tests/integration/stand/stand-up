@@ -231,17 +231,19 @@ EOF
   nmcli device set stand-cli managed yes
 
   # The profile change is persistent, so are the saved values: stand-down must work after a reboot.
+  # Without a default route the management connection is already the exception (the CI image).
   local dev mgmt
-  if [ ! -f "$saved" ]; then
-    dev=$(ip -4 route show default | awk '{print $5; exit}')
-    [ -n "$dev" ] || { echo "no default route to find the management connection" >&2; exit 1; }
+  dev=$(ip -4 route show default | awk '{print $5; exit}')
+  if [ ! -f "$saved" ] && [ -n "$dev" ]; then
     mgmt=$(nmcli -g GENERAL.CONNECTION device show "$dev")
     mkdir -p "${saved%/*}"
     { echo "$mgmt"; nmcli -g ipv4.never-default,ipv4.ignore-auto-dns,ipv6.method connection show "$mgmt"; } > "$saved"
   fi
-  mgmt=$(head -n 1 "$saved")
-  nmcli connection modify "$mgmt" ipv4.never-default yes ipv4.ignore-auto-dns yes ipv6.method disabled
-  nmcli device reapply "$(nmcli -g GENERAL.DEVICES connection show "$mgmt")"
+  if [ -f "$saved" ]; then
+    mgmt=$(head -n 1 "$saved")
+    nmcli connection modify "$mgmt" ipv4.never-default yes ipv4.ignore-auto-dns yes ipv6.method disabled
+    nmcli device reapply "$(nmcli -g GENERAL.DEVICES connection show "$mgmt")"
+  fi
 
   nmcli connection delete stand >/dev/null 2>&1 || true
   nmcli connection add type ethernet con-name stand ifname stand-cli \

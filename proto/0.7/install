@@ -1,17 +1,17 @@
 #!/bin/bash
 # Build and install the 0.7 plugin and create the profile proto-hy2 for the bench. Run as root, after
-# proto/stand/stand-up hy2 and with the 0.4 core user and tmpfiles in place.
+# tests/integration/stand/stand-up hy2 and with the 0.4 core user and tmpfiles in place.
 set -euo pipefail
 
 here=$(dirname "$(readlink -f "$0")")
-. "$here/../stand/secrets/env"
+. "$here/../../tests/integration/stand/secrets/env"
 
 make -s -C "$here"
 install -D -m 0755 "$here/pnv-proto-service" /usr/local/libexec/pnv-proto-service
 install -D -m 0755 "$here/../0.5/guard-cleanup" /usr/local/lib/pnv-proto/guard-cleanup
 install -D -m 0644 "$here/pnv-proto.name" /usr/lib/NetworkManager/VPN/pnv-proto.name
 install -D -m 0644 "$here/pnv-proto.conf" /usr/share/dbus-1/system.d/pnv-proto.conf
-install -D -m 0644 "$here/../stand/secrets/hy2.crt" /etc/pnv-proto/0.7/hy2.crt
+install -D -m 0644 "$here/../../tests/integration/stand/secrets/hy2.crt" /etc/pnv-proto/0.7/hy2.crt
 systemctl reload dbus
 
 nmcli connection delete proto-hy2 >/dev/null 2>&1 || true

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run the 0.5 scenarios against fake-daemon and print what each left behind. Run as root,
-# with the bench up (proto/stand/stand-up hy2) and the 0.4 configs (proto/0.4/make-configs).
+# with the bench up (tests/integration/stand/stand-up hy2) and the 0.4 configs (proto/0.4/make-configs).
 set -uo pipefail
 
 here=$(dirname "$(readlink -f "$0")")

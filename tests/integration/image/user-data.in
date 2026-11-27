@@ -1,0 +1,53 @@
+#cloud-config
+hostname: pnv-ci
+package_update: true
+package_upgrade: true
+packages:
+  # The system under test and the bench (tests/integration/stand): a missing tool is a red run.
+  - network-manager
+  - nftables
+  - iproute2
+  - tcpdump
+  - bind9-dnsutils
+  - dnsmasq-base
+  - python3
+  - python3-pytest
+  - curl
+  - openssl
+  - hostapd
+  - iw
+  - pkexec
+  - openssh-server
+  # Building the 0.7 prototype for the smoke test (removed in 2.7).
+  - gcc
+  - make
+  - pkgconf
+  - libnm-dev
+write_files:
+  # QEMU wakes a guest on the RTC alarm only from S3 (0.2).
+  - path: /etc/systemd/sleep.conf.d/pnv.conf
+    content: |
+      [Sleep]
+      MemorySleepMode=deep
+  # The management NIC (QEMU user networking, fixed MAC): never the default route, no DNS, no IPv6.
+  - path: /etc/NetworkManager/system-connections/mgmt.nmconnection
+    permissions: "0600"
+    content: |
+      [connection]
+      id=mgmt
+      type=ethernet
+      [ethernet]
+      mac-address=52:54:00:12:34:56
+      [ipv4]
+      method=auto
+      never-default=true
+      ignore-auto-dns=true
+      [ipv6]
+      method=disabled
+runcmd:
+  - DEBIAN_FRONTEND=noninteractive apt-get purge -y netplan.io netplan-generator python3-netplan @PURGE_RESOLVED@
+  - systemctl disable systemd-networkd.service systemd-networkd.socket systemd-networkd-wait-online.service
+  - rm -f /etc/netplan/50-cloud-init.yaml @RESOLV_CONF@
+  - touch /etc/cloud/cloud-init.disabled
+power_state:
+  mode: poweroff

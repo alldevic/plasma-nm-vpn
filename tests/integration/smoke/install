@@ -1,0 +1,21 @@
+#!/bin/bash
+# Build and install the prototype plugin and create the profile proto-hy2 for the bench's hysteria2 server.
+# SERVER overrides the server address. Run as root with the bench up.
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+. "$here/../stand/secrets/env"
+
+make -s -C "$here"
+install -D -m 0755 "$here/pnv-proto-service" /usr/local/libexec/pnv-proto-service
+install -D -m 0755 "$here/guard-cleanup" /usr/local/lib/pnv-proto/guard-cleanup
+install -D -m 0644 "$here/pnv-proto.name" /usr/lib/NetworkManager/VPN/pnv-proto.name
+install -D -m 0644 "$here/pnv-proto.conf" /usr/share/dbus-1/system.d/pnv-proto.conf
+install -D -m 0644 "$here/../stand/secrets/hy2.crt" /etc/pnv-proto/0.7/hy2.crt
+systemctl reload dbus
+
+nmcli connection delete proto-hy2 >/dev/null 2>&1 || true
+nmcli connection add type vpn con-name proto-hy2 autoconnect no \
+  vpn-type org.freedesktop.NetworkManager.pnv-proto \
+  vpn.data "server=${SERVER:-198.51.100.1}, port=443, obfs=$HY2_OBFS, ca=/etc/pnv-proto/0.7/hy2.crt, password-flags=0" \
+  vpn.secrets "password=$HY2_PASSWORD" >/dev/null

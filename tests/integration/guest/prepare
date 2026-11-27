@@ -1,0 +1,12 @@
+#!/bin/bash
+# prepare <cores dir>: in the test VM, as root: the core user, /run/amneziawg and the cores where the
+# system under test and the bench expect them; then the bench.
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+cores=$(readlink -f "$1")
+
+getent passwd plasma-nm-vpn >/dev/null || useradd --system --no-create-home --shell /usr/sbin/nologin plasma-nm-vpn
+install -d -o plasma-nm-vpn -g plasma-nm-vpn -m 0750 /run/amneziawg
+install -D -m 0755 -t /opt/pnv-proto/bin "$cores"/bin/*
+"$here/../stand/stand-up" all

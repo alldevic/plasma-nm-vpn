@@ -1,6 +1,6 @@
 #!/bin/bash
 # The 0.6 checks: xray on the persistent TUN with the default route through it. Run as root with
-# the bench up (proto/stand/stand-up vless) and the 0.4 core user and tmpfiles in place.
+# the bench up (tests/integration/stand/stand-up vless) and the 0.4 core user and tmpfiles in place.
 set -uo pipefail
 
 here=$(dirname "$(readlink -f "$0")")
@@ -9,7 +9,7 @@ tun=pnv-${U:0:8} unit=plasma-nm-vpn-core-$U.service
 cfg=/etc/pnv-proto/0.6/config.json
 www=/run/pnv-stand/www-inet
 
-. "$here/../stand/secrets/env"
+. "$here/../../tests/integration/stand/secrets/env"
 install -d -m 0750 -g plasma-nm-vpn "${cfg%/*}"
 sed -e "s|@TUN@|$tun|; s|@SERVER@|198.51.100.1|; s|@VLESS_UUID@|$VLESS_UUID|; s|@VLESS_PATH@|$VLESS_PATH|" \
     -e "s|@REALITY_PUBLIC@|$REALITY_PUBLIC|; s|@VLESS_SHORT_ID@|$VLESS_SHORT_ID|; s|@PARENT@|stand-cli|" \
