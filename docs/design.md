@@ -1,0 +1,413 @@
+# Modern VPN protocols in NetworkManager and KDE: design and plan
+
+22 November 2026 · Nikolay · revised 26 November 2026
+
+## Goals and requirements
+
+We need a set of NetworkManager plugins so that hysteria2, VLESS XHTTP Reality, AmneziaWG, TUIC, AnyTLS and ShadowTLS can be configured and enabled from the standard KDE interface (plasma-nm) without third-party applications. There is no such support out of the box: VPNs in NM are connected through plugins, each of which consists of a D-Bus daemon and a UI plugin for plasma-nm.
+
+- **Open-source project:** the source code is on GitHub, and third-party users install it on their own machines. No telemetry and no network requests other than the connection to the VPN server, the liveness check through the tunnel (see “Core supervision and cleanup”) and (from phase 2) updates of subscriptions the user has added themselves.
+- **Platform:** Debian forky (testing) and KDE Plasma 6; sid is supported along the way: the build from forky also works with the newer Qt and plasma-nm from sid. Other distributions are out of scope; only the packaging depends on Debian. Architecture: amd64 only; arm64 is not supported until there is something to test it on.
+- **Minimum new dependencies:** only our packages are installed on users' machines (they also contain the tunnel core binaries); system libraries come from a standard Debian installation with KDE.
+- **Everything through the UI:** no manual config editing; links and configs are imported with a button.
+- **Distribution:** the project's signed public apt repository; profiles are moved between machines by importing links and files.
+- **Localization:** UI strings in English, Russian translation via ki18n.
+- **Routing** is configurable. IPv6 inside the tunnel is optional, but IPv6 traffic must not bypass the tunnel.
+- **Leak protection:** with a default-route tunnel, DNS and IPv6 never bypass the tunnel; the kill switch is a per-profile option, off by default.
+- **Security:** a profile created by an unprivileged user gives them neither root privileges nor access to other users' secrets.
+
+## Threat model
+
+The project is installed by third-party users on their own machines, so the assumptions are broader than for an in-house fleet.
+
+- **The adversary is an ISP or censor with DPI:** it blocks addresses and recognizes protocols. Disguise is provided by the tunnel cores. The plugins are required to ensure that traffic which the profile sends through the tunnel never goes directly: not during normal operation, not on network changes, and (with the kill switch) not when the tunnel goes down.
+- **A local unprivileged user** can create their own VPN profiles: polkit allows this by default. Users' machines may be multi-user. Everything written to a profile is untrusted data for the daemon, which runs as root.
+- **Supply chain:** the project's repository, CI and signing key are an attractive target. Packages are installed as root and the daemons run as root, so compromising any link gives root on all users' machines. Mitigations are described in the section “Distribution and supply chain”.
+- **Out of scope:** root on the machine, server compromise, application-level leaks, local inspection of the machine (presence of the package, interface and unit names).
+
+## Scope
+
+- **MVP:** AmneziaWG, Hysteria2, VLESS XHTTP Reality; IP-based routing via NM; import of links and `.conf`; DNS and IPv6 leak protection; kill switch.
+- **Phase 2:** TUIC, AnyTLS, ShadowTLS (each as a separate entry in the “Add VPN” list); rule-based routing; IPv6 inside the tunnel; subscriptions with background updates; import of client JSON configs and `vpn://` from AmneziaVPN.
+
+## Protocols and backends
+
+The six protocols come down to three cores, and WireGuard needs no work: it is already built into NetworkManager.
+
+| #  | Protocol            | Core               | Phase  | Notes                                                                      |
+|----|---------------------|--------------------|--------|----------------------------------------------------------------------------|
+| 01 | VLESS XHTTP Reality | xray               | MVP    | XHTTP exists only in xray; xray's built-in TUN inbound is used             |
+| 02 | AmneziaWG (3.1)     | amneziawg-go + awg | MVP    | userspace only, the kernel module is not used                              |
+| 03 | WireGuard           | stock NM           | —      | no plugin needed                                                           |
+| 04 | Hysteria2           | sing-box           | MVP    | Salamander obfuscation, port hopping                                       |
+| 05 | TUIC                | sing-box           | 2      |                                                                            |
+| 06 | AnyTLS              | sing-box           | 2      |                                                                            |
+| 07 | ShadowTLS           | sing-box           | 2      | in sing-box it is a wrapper: a chain of two outbounds                      |
+
+According to the sing-box changelog (current stable version 1.14.4), all the required protocols are already there: ShadowTLS since 1.0, TUIC since 1.4, Hysteria2 since 1.5 (port hopping since 1.12), AnyTLS since 1.12.
+
+NetworkManager-ssh was considered separately: a plain L3 tunnel via `ssh -w` without obfuscation; it is not suitable for circumventing blocking, but it works as a fallback and as an example of a finished NM plugin.
+
+## Architecture
+
+There is one plugin per core, and all the shared work is moved into a library, so three plugins do not mean three copies of the code. Each package ships its own core: if a package is not installed, its entry is not in the VPN list.
+
+```mermaid
+flowchart TB
+    UI["plasma-nm: profile editors (VpnUiPlugin) from the plasma-nm-vpn-amneziawg, plasma-nm-vpn-sing-box, plasma-nm-vpn-xray packages, built on shared widgets"]
+    NM["NetworkManager: addresses, routes, DNS, route to the server"]
+    subgraph common["daemons on the plasma-nm-vpn-common library: D-Bus, states, field validation, config generation, systemd units, nftables, network monitoring"]
+        awg["plasma-nm-vpn-service-awg<br/>AmneziaWG"]
+        sb["plasma-nm-vpn-service-sb<br/>Hysteria2<br/>(phase 2: TUIC, AnyTLS, ShadowTLS)"]
+        xr["plasma-nm-vpn-service-xray<br/>VLESS XHTTP Reality"]
+    end
+    UI -- "profile: vpn.data, vpn.secrets" --> NM
+    NM -- "Connect, Disconnect, NewSecrets" --> common
+    common -- "Config, Ip4Config, Failure" --> NM
+    awg -- "systemd unit, user plasma-nm-vpn" --> b1["amneziawg-go<br/>(configured by the daemon via awg setconf)"]
+    sb -- "systemd unit, user plasma-nm-vpn" --> b2["sing-box"]
+    xr -- "systemd unit, user plasma-nm-vpn" --> b3["xray (built-in TUN)"]
+```
+
+*WireGuard is not shown: it is built into NetworkManager, no plugin is needed.*
+
+NM starts the daemon; the daemon validates the profile fields, generates the core config from them, starts the core and hands the connection parameters to NM. Addresses, routes and DNS are always set by NM; the daemon does not touch them.
+
+- **Daemon language:** C with libnm (`NMVpnServicePlugin`, created with `NM_VPN_SERVICE_PLUGIN_DBUS_WATCH_PEER=TRUE`, so that the daemon notices a vanished NM and exits right after `STOPPED`). The base class itself implements the D-Bus interface, name registration, states and signals; all that remains is to override `connect`, `disconnect`, `need_secrets`. The stock plugins (openvpn, vpnc, openconnect) are written the same way. Go is needed only in CI, to build amneziawg-go, which has no binary releases (see “Packages”); the UI plugin is written in C++/Qt.
+- **UI plugin:** C++/Qt 6 and KF6, a subclass of `VpnUiPlugin`.
+- **Core launch:** via systemd (`StartTransientUnit` over D-Bus), unit `plasma-nm-vpn-core-<uuid>.service`. The core runs as the system user `plasma-nm-vpn` with `CAP_NET_ADMIN` and `CAP_NET_RAW` (as in the cores' official units), in a sandbox (`ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, `NoNewPrivileges`). The config is passed via `LoadCredential=`, so only the core user can read it. All cores of all profiles share this one user, so a core compromised by a malicious server could read the configs (including secrets) of other active profiles; this is accepted for the MVP (see the risks), and per-unit isolation (`DynamicUser=` with a cgroup-based kill switch exemption instead of `skuid`) is a phase 2 candidate. Logs go to the unit's journal. The cores' official units also run without root: Xray-install uses a dedicated user `xray` with `CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW`, and sing-box 1.14.4 uses the user `sing-box` with ambient capabilities.
+- **Core lifetime is bound to the daemon.** On `Connect` (the profile UUID only becomes known there), the daemon moves itself into its own transient scope (`plasma-nm-vpn-daemon-<uuid>.scope`), and both the core unit and a small guard unit get `BindsTo=` and `After=` on that scope. If the daemon exits in any way, including a crash, the scope becomes empty: systemd stops the core by itself, and the guard unit runs the cleanup (see “Core supervision and cleanup”). Without this, after a daemon crash the core would keep running and the nftables chains would stay until someone started the profile again.
+- **The daemon reports the TUN name to NM** (`NM_VPN_PLUGIN_CONFIG_TUNDEV`): NM sets addresses and routes on this interface and, when the parent device changes, moves the route to the gateway (only for VPNs with a TUN).
+- **amneziawg-go:** the UAPI socket directory `/run/amneziawg` is hardcoded in both amneziawg-go and `awg`. So `plasma-nm-vpn-amneziawg` creates it via tmpfiles.d with owner `plasma-nm-vpn`. `RuntimeDirectory=` does not fit: the directory is shared by all connections, and systemd would delete it as soon as the first unit stops. With `ProtectSystem=strict`, the directory is made writable via `ReadWritePaths=/run/amneziawg`. The daemon (root) configures the interface via `awg setconf`; root is able to connect to the socket. amneziawg-go runs in the foreground (`-f`).
+- **Multiple connections:** `.name` sets `supports-multiple-connections=true`; NM starts a separate daemon instance for each connection and passes it `--bus-name <service>.Connection_<N>`. The D-Bus policy allows `own_prefix` on the service name. The TUN name is `pnv-` plus 8 characters of the profile UUID.
+- **Names must match:** the service-type in `.nmconnection`, `service` in `.name`, the daemon's D-Bus name and the `X-NetworkManager-Services` key in the UI plugin metadata; otherwise plasma-nm will not link the editor to the daemon. A separate `backend` key is not needed: the core is determined by the service-type.
+- **Service names follow the protocol, not the core:** `org.freedesktop.NetworkManager.pnv.hysteria2`, `org.freedesktop.NetworkManager.pnv.vless`, `org.freedesktop.NetworkManager.pnv.amneziawg`; in phase 2, `.pnv.tuic`, `.pnv.anytls`, `.pnv.shadowtls`. These names end up in `.nmconnection` and cannot be changed later without breaking profiles. So they do not depend on the core: if a protocol moves to another core, profiles keep working. As a side benefit, the sing-box name does not appear in identifiers visible to the system. The core unit is named by UUID, without the core name.
+- **Paths:** daemons — `/usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-{sb,xray,awg}` (the core abbreviations are the same as in the package version suffix); the guard tool — `/usr/bin/plasma-nm-vpn-guard` (users run `--clear`); `/run/plasma-nm-vpn/` itself — 0755 (via tmpfiles.d, so that `guard-status` is reachable); generated core config — `/run/plasma-nm-vpn/<uuid>/` (root, 0700; the source for `LoadCredential=`); block status file — `/run/plasma-nm-vpn/guard-status` (world-readable, see “Leak protection”); cached server IPs — `/var/lib/plasma-nm-vpn/<uuid>`; address pool settings — `/etc/plasma-nm-vpn/plasma-nm-vpn.conf`; config templates, allowlists and nftables templates — `/usr/share/plasma-nm-vpn/`.
+- **sing-box protocols are separate entries in the “Add VPN” list:** each protocol has its own `.name` with its own `service`, and they all point to the same daemon binary (NM checks that the name and `service` are unique, but not `program`). The daemon determines the protocol from `vpn.service-type` in the settings received in `Connect`. A `protocol` key in `vpn.data` is therefore not needed.
+
+## Packages
+
+| Package | Contents | Dependencies |
+|-------|------------|-------------|
+| `plasma-nm-vpn` | metapackage: installs all core packages, and in phase 2 the new ones too | all core packages (`plasma-nm-vpn-common` comes in through them) |
+| `plasma-nm-vpn-archive-keyring` | repository signing key and the source file `/etc/apt/sources.list.d/plasma-nm-vpn.sources` with `Signed-By` | — |
+| `plasma-nm-vpn-common` | shared daemon library; shared editor widgets (Qt/KF6, without plasma-nm's internal API); the `plasma-nm-vpn` user; nftables templates; `plasma-nm-vpn-guard` and its polkit action | `network-manager`, `nftables`, `pkexec` |
+| `plasma-nm-vpn-sing-box`, `plasma-nm-vpn-xray`, `plasma-nm-vpn-amneziawg` | core binary in `/usr/lib/plasma-nm-vpn/bin/`, daemon, `.name`, editors (`VpnUiPlugin`), config templates and key allowlists for this core version | `plasma-nm-vpn-common (= <project version>)` (the shared library is private); `plasma-nm (>= 4:6.0), plasma-nm (<< 4:7)` |
+
+The new packages add almost no system dependencies. nftables has priority `important` and is present in any Debian installation, and json-glib (for JSON generation in the daemons) is pulled in by `xdg-desktop-portal`, which is mandatory for KDE (verified on forky). `pkexec` is a small separate package split out of polkit; whether a stock forky KDE install already has it is checked in milestone 0.2.
+
+**Removal and upgrades.** On `remove` (not on `upgrade`), the `prerm` of a core package deactivates that package's active VPN connections and waits up to 20 s for their daemon scopes to go away (then warns and continues, so removal is never blocked), and the `prerm` of `plasma-nm-vpn-common` also removes all of our nftables chains and `guard-status`, so that removing the packages never leaves a block without a tool to clear it. An upgrade does not touch running connections: the run-directory markers and the `guard-status` format carry a version, and the new code reads the previous one. A core-only release (for example `0.1.0+sb1.14.5`) is built from the release branch of the current project version, not from `main`, so that it matches the published `plasma-nm-vpn-common`.
+
+One package, one core: the user installs `plasma-nm-vpn-sing-box` and gets the core, the daemon and the editors for all protocols that the package supports in its current version. The list of protocols is given in the package description. A core package's version is the project version plus a core suffix: `0.1.0+sb1.14.4`, `0.1.0+xray26.11.9`, `0.1.0+awg3.1.20261116` (based on the amneziawg-go tag; the `awg` version is given in the changelog). `plasma-nm-vpn-common`, the metapackage and `plasma-nm-vpn-archive-keyring` have just the project version. On purge, the system user `plasma-nm-vpn` is not removed, as is customary in Debian. Installation: download `plasma-nm-vpn-archive-keyring` from the GitHub release page, install it, then run `apt install plasma-nm-vpn` to get everything at once, or install individual core packages.
+
+- **plasma-nm compatibility:** the `VpnUiPlugin` API is internal (there are no headers in Debian, and `libplasmanm_editor.so` has no version in its SONAME), but it is stable in practice. The headers the plugin needs (`vpnuiplugin.h`, `settingwidget.h`, `passwordfield.h`) have not changed ABI even once from 6.0.0 to 6.8.3; the only change across the series was a clang-format reformatting. Therefore:
+  - one editor build per release, installed directly into plasma-nm's plugin directory (`qt6/plugins/plasma/network/vpn/`);
+  - the dependency `plasma-nm (>= 4:6.0), plasma-nm (<< 4:7)`: plasma-nm updates within 6.x do not remove the packages, and there is no `apt autoremove` cascade;
+  - the real compatibility constraint is the Qt version: Qt rejects a plugin built against a newer minor Qt version than the installed one. The build runs in a forky environment, and the packages get an explicit `libqt6core6t64 (>= <the Qt version used for the build>)` via a substvar computed at build time: `dpkg-shlibdeps` derives versions from the symbols used and would allow an older Qt that then rejects the plugin;
+  - CI on GitHub Actions tracks plasma-nm in sid and compares the plugin headers with those the release was built against. If they have changed, the build is fixed before the new plasma-nm reaches forky. plasma-nm has no autopkgtest, so migration from sid takes about 5 days (urgency medium);
+  - after a package update, kded6 and systemsettings keep the old plugin in memory until they are restarted or the user logs in again (the applet in plasmashell reads only the metadata).
+
+  The shared widgets in `plasma-nm-vpn-common` do not use the internal API and are not tied to the plasma-nm version.
+- **Where the cores come from** (provenance verification is covered in the section “Distribution and supply chain”):
+  - sing-box and xray: repackaging of upstream releases (`sing-box-<version>-linux-amd64.tar.gz`, `Xray-linux-64.zip`);
+  - amneziawg-go publishes no binary releases, only tags. It is built in CI from a pinned tag (currently `v3.1.20261116`, which supports AWG 3.1);
+  - `awg` from amneziawg-tools is also built from a tag (`v3.1.20260812`) in a forky environment: the upstream prebuilt archives are built on Ubuntu 22.04.
+
+  The path `/usr/lib/plasma-nm-vpn/bin/` does not conflict with manually installed binaries.
+- **Core updates:** a new core version → a new package version: CI builds it and runs the integration tests (see “Testing”) → publication to the project repository. Config templates and key allowlists live in the same package as the binary, so they cannot drift apart from it. Security fixes in the cores are released out of band.
+
+## Distribution and supply chain
+
+- **Repository:** a flat apt repository in the release assets of the latest GitHub release; there is no separate hosting. In each release, CI uploads all current packages (including unchanged ones), plus `Packages` and an `InRelease` signed with the project key. Source: `URIs: https://github.com/<owner>/plasma-nm-vpn/releases/latest/download/`, `Suites: ./`, no `Components`; apt follows GitHub's redirect to the file storage. Old versions are available only on the pages of previous releases; rolling back via apt is not possible. freelens, openvpn-auth-oauth2 and Jamulus are already distributed this way; apt on forky handles the redirect chain to `release-assets.githubusercontent.com` (the query string problem existed only in old apt, before 2.2). Rules:
+  - a release is created as a draft, all files are uploaded to it, and only then is it published: otherwise clients would see an inconsistent index;
+  - unchanged packages are not rebuilt but taken from the previous release, with their sha256 checked against the previous `Packages`: a package with the same version but different contents breaks apt clients;
+  - release rehearsals take place in a separate test repository (`<owner>/plasma-nm-vpn-test`) with a test key, because any published release of the main repository immediately becomes `latest`; this is why the URI in the `.sources` file of the `plasma-nm-vpn-archive-keyring` package is filled in at build time from the repository name;
+  - GitHub renames assets with special characters (`~` certainly, `+` possibly), so `Filename:` in `Packages` is taken from the final asset names, and the file names avoid these characters;
+  - `Acquire-By-Hash` is not enabled: release assets cannot contain directories; the index is published as `Packages` and `Packages.xz` (decided in milestone 0.9);
+  - GitHub limits: files up to 2 GiB, up to 1000 assets per release; total size and traffic are unlimited.
+
+  The key is rotated by updating the `plasma-nm-vpn-archive-keyring` package.
+- **CI on GitHub Actions:** third-party actions are pinned by commit SHA, and `GITHUB_TOKEN` has minimal permissions. Builds from pull requests get no secrets. Signing is done by a separate job in a GitHub Environment with manual approval; only that job has access to the key. Build provenance attestations are published for the .deb files (GitHub artifact attestations).
+- **Cores:** the sha256 of each upstream archive is recorded in the project repository, and any change to it goes through review like ordinary code. In addition, the archive is checked against what upstream publishes: for xray these are the `.dgst` files (SHA2-256 and SHA2-512). sing-box publishes no separate checksums, so the asset `digest` from the GitHub API is used. Cores built from source are pinned by the tag's commit hash.
+- **Core licenses** (checked against the LICENSE files in the upstream repositories): each core is distributed under its own license. For GPL cores, the sources of the same version together with their Go dependencies (`go mod vendor`) are published next to the binary, so that the archive is the complete corresponding source code. The additional sing-box term, verbatim: “In addition, no derivative work may use the name or imply association with this application without prior consent”.
+
+  | Core | License | What to do |
+  |------|----------|-------------|
+  | sing-box | GPL-3.0-or-later with an additional term on use of the name | publish the sources; ask in a sing-box issue whether the term allows the package name `plasma-nm-vpn-sing-box`. If there is no permission or no answer by the start of milestone 7.1, the package ships under a neutral name without “sing-box” (chosen in 7.1, so that the README and acceptance already use it), and the core is mentioned only in the description and the license information. The core binary and the GPL source archive keep their upstream names, and the `+sb` version suffix stays: it is an abbreviation, not the name |
+  | xray | MPL-2.0 | state the license and link to the sources |
+  | amneziawg-go | MIT | state the license |
+  | awg (amneziawg-tools) | GPL-2.0 | publish the sources |
+
+- **Project license:** MIT. It is GPL-compatible, so the editors can be linked against plasma-nm's internal library, which is distributed under the GPL. The built editor together with that library forms a combined work under the GPL; the project's sources remain under MIT.
+- **Vulnerabilities:** the daemons run as root, so almost any bug in them means local privilege escalation. The repository has a `SECURITY.md`, and reports are accepted via private GitHub Security Advisories.
+
+## Profile data schema
+
+A profile stores typed fields, not a ready-made config. The daemon generates the core config from the fields using a template for the pinned core version. This way secrets do not end up in `vpn.data`, the daemon does not execute an arbitrary config as root, and a core update changes the template but not the profiles.
+
+Common `vpn.data` keys:
+
+| Key | Purpose |
+|------|------------|
+| `schema` | profile schema version; the daemon understands all past versions, and the editor migrates the profile to the current one on save |
+| `server`, `port` | server host or IP and port (Hysteria2 uses `ports` instead of `port`) |
+| `dns` | tunnel DNS servers. If the field is empty and the tunnel is a default-route tunnel, the daemon uses `1.1.1.1` (Cloudflare) and `9.9.9.9` (Quad9) for every protocol; with never-default, no defaults are passed (see “DNS”). For AmneziaWG the importer fills the field from the `.conf` |
+| `kill-switch` | `yes`/`no`, default `no` |
+| `allow-lan` | `yes`/`no`, default `yes`: with the kill switch, local networks (RFC 1918, link-local) remain reachable |
+| `mtu` | optional |
+| `extra` | JSON, sing-box and xray only: merged only into the outbound object; keys are checked against an allowlist |
+
+Protocol keys:
+
+| Protocol | `vpn.data` | `vpn.secrets` |
+|----------|------------|---------------|
+| Hysteria2 | `ports` (ports in link format: `443` or `443,5000-6000`; the daemon converts them to sing-box format), `hop-interval`, `obfs` (`salamander` or empty), `tls-sni`, `tls-alpn`, `tls-insecure`, `tls-pin-sha256`, `up-mbps`, `down-mbps` | `password`, `obfs-password` |
+| VLESS XHTTP Reality | `encryption` (`none` or a VLESS Encryption ML-KEM key), `reality-pbk`, `reality-sid`, `reality-spx`, `tls-sni`, `tls-fingerprint`, `xhttp-mode`, `xhttp-path`, `xhttp-host`, `xhttp-extra` (JSON, allowlist) | `uuid` |
+| AmneziaWG | `address`, `peer-public-key`, `allowed-ips`, `keepalive`, `awg-<parameter>` for AmneziaWG parameters (Jc, Jmin, Jmax, S1–S4, H1–H4, I1–I5; from AWG 3.0: ContentPaddingAddition, rekey/keepalive timings, MaxHandshakeAttempts; from 3.1: RandomTrailers, DisableCookies) | `private-key`, `preshared-key`, `awg-headerprotectionkey` |
+
+The list of allowed AmneziaWG parameters is data in the `plasma-nm-vpn-amneziawg` package, not code: a new parameter is added by updating the list together with the amneziawg-go version. The editor shows them as a key–value table restricted to this list. `HeaderProtectionKey` is not part of the table: it is a secret and has its own field.
+
+AmneziaWG rules in the MVP:
+- one `[Peer]` is supported; a `.conf` with several is rejected on import with a clear error;
+- the first IPv4 address is taken from `Address` (`Ip4Config` holds only one), and the rest are dropped with a warning; IPv6 addresses and IPv6 entries in `AllowedIPs` are dropped, because IPv6 in the tunnel is phase 2;
+- `0.0.0.0/1` + `128.0.0.0/1` in `AllowedIPs` are normalized to `0.0.0.0/0` by the shared validator library (so the importer, the editor and the daemon all treat them alike). The tunnel is considered a default-route tunnel if `AllowedIPs` contains `0.0.0.0/0` and never-default is not enabled; the DNS and IPv6 guard and the kill switch depend on this. Otherwise the daemon passes `NM_VPN_PLUGIN_IP4_CONFIG_NEVER_DEFAULT=true` and only the narrower `AllowedIPs` as routes, because NM would otherwise put a default route through any VPN;
+- if the `.conf` has no `DNS`, the importer leaves `dns` empty; when the tunnel is a default-route tunnel, the daemon then uses the same defaults as for the proxy cores (with never-default, no DNS is passed).
+
+**Secrets** are stored the standard plasma-nm way (the `PasswordField` widget, `<key>-flags` flags in `vpn.data`): for each field you can choose “Store password for this user only (encrypted)” (the default when a keychain is available; since 6.7 plasma-nm stores them via QtKeychain in KWallet or Secret Service, and without a keychain `PasswordField` defaults to the next option), “Store password for all users (not encrypted)” (in the profile file, root, 600) or “Ask for this password every time”; optional secrets (`obfs-password`, `preshared-key`, `awg-headerprotectionkey`) also offer “Not required” (`NotRequired`), so that an empty optional secret does not trigger a prompt. The daemon implements `need_secrets` for each protocol. The plasma-nm agent hands over stored secrets without loading the editor; the editor is needed only for an interactive prompt (“Ask for this password every time”, wrong password). Import puts the secrets from a link into `vpn.secrets`; export includes secrets only when explicitly chosen.
+
+## Daemon security
+
+- Only the config generated by the daemon reaches the core; text from the profile is never passed through as a whole.
+- `awg-quick` is not used. wg-quick keys (`PreUp`, `PostUp`, `PreDown`, `PostDown`, `SaveConfig`, `Table`) are dropped with a warning when importing a `.conf`; `Address`, `DNS`, `MTU`, `Endpoint` are parsed into fields. The config for `awg setconf` is generated by the daemon.
+- All fields are validated: host and IP format, port ranges, base64 keys, lengths; control characters and line breaks are forbidden (the lesson of CVE-2018-10900 in NetworkManager-vpnc).
+- `extra` and `xhttp-extra` go through a key allowlist for the core version. Keys with file paths, `detour` and anything outside the outbound are forbidden.
+- The cores run without root (see “Architecture”).
+- The import parsers and the daemon validators are covered by fuzzing.
+
+## plasma-nm user interface
+
+The “everything through the UI” requirement means structured forms, not a field for raw JSON: links and configs are pasted via import in the editor (see below). To avoid writing a separate form for each protocol, forms are assembled from shared blocks. The form fields are the source of truth: both the profile and the export are built from them.
+
+| Block                                       | Where needed                          |
+|---------------------------------------------|---------------------------------------|
+| Server, port                                | all                                   |
+| TLS (SNI, ALPN, insecure, pin; fingerprint only for protocols over TCP) | Hysteria2; in phase 2 TUIC, AnyTLS, ShadowTLS |
+| Reality (SNI, pbk, sid, spx, fp)            | VLESS (lives in the VLESS editor)     |
+| XHTTP transport (mode, path, host, extra)   | VLESS (lives in the VLESS editor)     |
+| Obfuscation (Salamander), port hopping      | Hysteria2                             |
+| Authentication (password or UUID)           | all except AmneziaWG                  |
+| Interface and Peer, obfuscation parameters  | AmneziaWG                             |
+| Protection: kill switch, local network, DNS | all                                   |
+| Advanced: MTU                               | all                                   |
+| Advanced: additional parameters (JSON)      | sing-box, xray                        |
+
+The shared blocks in `plasma-nm-vpn-common` do not use plasma-nm's internal API. So `PasswordField` (which comes from `libplasmanm_editor.so`) is created by the editor in the core package and passed to the authentication block. The “Reality”, “XHTTP transport”, “Obfuscation, port hopping” and “Interface and Peer” blocks are each needed by only one protocol and live in that protocol's editor rather than among the shared ones. Value lists for the forms (TLS fingerprints, XHTTP modes) are data shipped with the core package next to the allowlists. Form validation calls the same 2.2 validator library as the daemon, allowlists included, so that the form and the daemon reject the same things. The import parsers and validators are C/GLib code without ki18n: they return message codes with parameters, and the editors render them through ki18n.
+
+Import is built into our editor: the “Paste link or config” field and the “Open file” button fill in the form. plasma-nm's “Import VPN connection” in the plasma-nm settings cannot be relied on, for two reasons. It works only with files, without the clipboard or links. And the file goes to the first plugin that claims the extension: `.conf` is claimed by WireGuard and OpenVPN, so it would never reach AmneziaWG. In addition, this import loads all VPN plugins, so our plugin must survive being loaded in someone else's scenario without side effects.
+
+MVP formats:
+
+- `hysteria2://` and `hy2://` per the [official Hysteria2 URI scheme](https://v2.hysteria.network/docs/developers/URI-Scheme/): `auth@host:ports` with multiple ports (`443,5000-6000`), `obfs`, `obfs-password`, `sni`, `insecure`, `pinSHA256`. The `gecko` obfuscation, the `ech` parameter and the `hysteria2+realm://` variant are not supported in the MVP: import reports this. If milestone 2.5 finds that sing-box has no equivalent of `pinSHA256`, a link with it is rejected the same way rather than imported without the pin;
+- `vless://` per the XTLS link standard ([Xray-core #716](https://github.com/XTLS/Xray-core/discussions/716)): `type=xhttp`, `security=reality`, `encryption`, `pbk`, `sid`, `spx`, `fp`, `sni`, `path`, `host`, `mode`, `extra`. `allowInsecure` has been removed from Xray-core, and the standard has `pcs` and `vcn` instead; they are not needed for Reality;
+- AmneziaWG `.conf` (awg-quick format, including files from AmneziaVPN).
+
+Parameters that are not in the form are shown as a list on import: allowed ones go into `extra`, and the rest are dropped with a warning. Export is the “Export” button in our editor, to the same formats; whatever the link format cannot carry is lost, and the editor warns about it. Our plugin does not support plasma-nm's stock import and export: `supportedFileExtensions()` returns an empty list, and `suggestedFileName()` an empty string.
+
+The `uuid` field is masked like a password (`PasswordField` with `setPasswordModeEnabled(true)`, as for every secret field). The VLESS editor also has an `encryption` field (default `none`), so that an imported ML-KEM value survives save and export. The editor writes `vpn.persistent=yes` (`VpnSetting::setPersistent`) on every save, not only for a new profile: plasma-nm replaces the whole `vpn` setting with what the plugin returns, so a value not written on re-save would be lost. A VPN plugin cannot set `ipv4.*` settings: plasma-nm builds them with its IPv4 tab, and the plugin returns only the `vpn` setting. So DNS with a default-route tunnel is handled without them (see “DNS”).
+
+The editor plugin is implemented as a `VpnUiPlugin` (KPluginFactory in plasma-nm). The `vpn/openvpn` and `vpn/sstp` directories and the WireGuard editor in `libs/editor/settings/wireguard*` of the plasma-nm sources serve as examples.
+
+- **Build:** the headers `vpnuiplugin.h`, `settingwidget.h` and `passwordfield.h` (LGPL) are copied into the repository from a plasma-nm tag, and we write our own `plasmanm_editor_export.h`. Linking is only against `libplasmanm_editor.so`. Plus NetworkManagerQt, KF6CoreAddons, KF6WidgetsAddons, KF6I18n, Qt6 Widgets and the libnm headers (`vpnuiplugin.h` includes `nm-connection.h`).
+- **Translations:** UI strings go through ki18n, and the `.pot` file is extracted KDE-style (a `Messages.sh`-like script running xgettext with the ki18n keywords); ki18n does not translate the plugin's JSON metadata, so `Name[ru]` and `Description[ru]` are written into it by hand.
+- **Packaging:** the private library has no shlibs information, so `dpkg-shlibdeps` is run with missing data ignored, and `plasma-nm` is listed in `Depends` manually.
+- **Discovery:** plasma-nm finds the plugin via `KPluginMetaData::findPlugins("plasma/network/vpn")` by the `X-NetworkManager-Services` key in the JSON metadata.
+- **Who loads the plugin:** systemsettings, when editing, and also on stock import and export, where our plugin only declines; kded6, only for an interactive password prompt. The applet reads only the metadata.
+
+plasma-nm version compatibility is described in the section “Packages”.
+
+## Routing, DNS and IPv6
+
+NetworkManager is the sole owner of addresses, routes and DNS, in every mode. sing-box runs with `auto_route: false`, xray's TUN runs without routes, and AmneziaWG's `AllowedIPs` are passed to NM as routes.
+
+### Modes
+
+1. **IP-based, via NetworkManager (MVP).** The IPv4 tab in plasma-nm (never-default, custom routes) works as for any VPN.
+2. **Rule-based (phase 2).** NM sets the default route via the TUN, and the core decides “direct or via proxy” by domains and geoip; direct traffic goes out bound to the VPN's parent device. The mode suits both sing-box and xray: both have routing.
+
+### Route to the server
+
+- The daemon resolves the server name with the system resolver before the tunnel comes up, picks one IP (IPv4 preferred; IPv6 only if the server has no A record) and passes exactly that IP to the core; SNI and Host remain the name. The IP is saved in `/var/lib/plasma-nm-vpn/<uuid>` only after the session succeeds (see “Leak protection”), so that a wrong or spoofed resolution never overwrites a known-good IP. The name is resolved again only on a fresh connect while this profile has no leftover kill switch chains; if resolution fails (for example, another profile's kill switch chains block DNS), the cached server IP is used. On reconnect the session's server IP (kept in the run directory) is used, and when this profile's kill switch chains remain after a failure the cached server IP is used right away: at that moment the default route and DNS still point into the non-working tunnel, and the kill switch blocks requests that bypass it. If the server has changed its IP, such a connection will fail; how the user learns about the block and clears it is described in the section “Leak protection”. Files of deleted profiles are cleaned up by tmpfiles.d based on the modification time (`m:90d`; the daemon refreshes the file on every successful connection). The daemon does not reconcile the cache with NM's profile list: profiles can change while NM is down, and the age rule is simpler. The cache file stores the `server` value next to the IP and is ignored when the profile's `server` has changed; an IP literal in `server` is always used directly. The very first connect of a profile with failed resolution and no cache makes `Connect` fail before any chains are installed; this is not a give-up. The same IP is given to NM as the external gateway (`NM_VPN_PLUGIN_CONFIG_EXT_GATEWAY`), and NM itself sets a /32 route to it via the parent device, including with never-default. Without a gateway NM aborts activation, so the gateway is always passed. The IP in the route and the IP the core connects to always match, including for servers behind a CDN.
+- The second line of defense against a routing loop: the core's outgoing connections are bound to the VPN's parent device in NM (`bind_interface` in sing-box, `sockopt.interface` in xray). For xray the interface is set explicitly; auto-detection is not used. The auto-detection bug (issue 6412) is fixed in stable v26.10.21, but explicit binding is needed in any case, so that the core matches the VPN's parent device in NM. For AmneziaWG the route to the endpoint is enough.
+
+### TUN addressing
+
+Proxy cores get no address from the server. The daemon takes a /30 subnet from 198.18.0.0/15 (a range reserved for testing that does not occur on local networks), skipping subnets already in use on the machine, and hands it to NM in `Ip4Config`. The choice is made under a lock file in `/run/plasma-nm-vpn/` with a reservation per UUID, because two daemons connecting at once would otherwise pick the same subnet before NM applies either. A reservation is released on disconnect and ignored once its run directory is gone. The pool can be overridden in `/etc/plasma-nm-vpn/plasma-nm-vpn.conf`.
+
+### DNS
+
+- The daemon passes the DNS servers in `Ip4Config`: those from the profile, or the defaults for a default-route tunnel (see “Profile data schema”). With a default-route tunnel, queries to them go into the tunnel.
+- With never-default, no defaults are passed: otherwise public resolvers would take over the system's DNS and be queried directly via the ISP. DNS servers the user set explicitly get /32 routes via the TUN, so that queries to them still go into the tunnel.
+- With a default-route tunnel, NM itself adds the routing domain `~.` to the VPN connection if it has no search domains of its own: with systemd-resolved, all queries go through the VPN. In `resolv.conf` mode, the VPN's DNS servers (priority 50) come before the devices' DNS servers (100).
+- Queries to other connections' DNS servers, if they do go past the tunnel, are cut off by the DNS guard from the next section. The editor cannot set a negative `ipv4.dns-priority` (see “plasma-nm user interface”). Such queries fail fast (reject, not drop); users can set a negative priority themselves on the IPv4 tab to avoid these needless queries altogether.
+
+### Leak protection
+
+Our own nftables table `inet plasma_nm_vpn`; NM does not touch it. Each connection's rules live in their own chains with the profile UUID in the name, so several simultaneous connections do not interfere with each other. The chains are attached to the `output` and `forward` hooks so that the rules also apply to container and VM traffic. Everywhere below, “the tunnel” means any of our `pnv-*` interfaces, not only this connection's TUN: a reject in any base chain is final, so otherwise one connection's chains would reject traffic correctly routed into another connection's tunnel.
+
+- **DNS and IPv6 guard**, on whenever the tunnel carries the default route:
+  - IPv6, if the tunnel has none: outgoing IPv6 via non-tunnel interfaces is rejected (reject rather than drop, so that applications fall back to IPv4 immediately). Allowed: link-local and multicast destinations, and ICMPv6 neighbour discovery (router solicitation, neighbour solicitation and advertisement) to any address, because the kernel also sends neighbour probes to global addresses.
+  - DNS: outgoing traffic to ports 53 and 853 via non-tunnel interfaces is rejected. Loopback is not affected; otherwise the systemd-resolved stub at 127.0.0.53 would break.
+  - Traffic of the core itself (`meta skuid plasma-nm-vpn`) is exempt: otherwise the core could not reach the server over IPv6 or on a non-standard port.
+- **Kill switch** (a checkbox in the profile, off by default), only for default-route tunnels. The daemon, which receives the whole connection in `Connect`, ignores the setting with never-default and says so in the journal. The editor cannot see never-default (it lives on plasma-nm's IPv4 tab, and the plugin gets only the `vpn` setting), so it shows a permanent hint next to the checkbox; for AmneziaWG it also disables the checkbox when `allowed-ips` has no `0.0.0.0/0`. All outgoing traffic is rejected except:
+  - loopback and the tunnel;
+  - DHCP and DHCPv6; ICMPv6 neighbour discovery (router solicitation, neighbour solicitation and advertisement) to any address, as in the guard; MLD to multicast destinations;
+  - traffic of the core itself (`meta skuid plasma-nm-vpn`);
+  - local networks, if the `allow-lan` checkbox is set. It is set by default: the kill switch should not break the printer or NAS, and the ISP does not see local traffic anyway. DNS is the exception: ports 53 and 853 are rejected towards every non-tunnel destination, local networks included, so that a blocked machine does not send its queries to the LAN router, which would forward them to the ISP.
+
+**When the chains are installed.** Only after the guard unit is running (see “Core supervision and cleanup”), so that a crash at any later moment is cleaned up: first the guard unit, then the server name is resolved, then the chains are installed. The chains are in place before `Ip4Config` is sent, so there is no unprotected window.
+
+**Kill switch lifecycle.** A *session* is one `Connect` until disconnect or give-up. A session *succeeds* when it reaches ACTIVATED and passes the liveness check (see “Core supervision and cleanup”); the daemon then places a success marker in `/run/plasma-nm-vpn/<uuid>/`.
+
+- While the session runs, including during reconnects, the kill switch chains are in place.
+- After success, the chains are removed only on an explicit disconnect. Everything else (a give-up after a failed reconnect, a daemon crash, NM going away) leaves them in place: fail closed.
+- A disconnect counts as explicit only if NM reports the deactivation reason of the VPN active connection as user-initiated (`NM_ACTIVE_CONNECTION_STATE_REASON_USER_DISCONNECTED`, observed via libnm) or the profile was deleted (`CONNECTION_REMOVED`: a block for a profile that no longer exists could not even be named in the banner). On a give-up the daemon sets a give-up flag before calling `nm_vpn_service_plugin_failure`, because that function itself calls the disconnect handler. A disconnect caused by a vanished NM peer, an NM shutdown or restart, or libnm's connect timer counts as a give-up. NM's actual behaviour on `systemctl restart NetworkManager` is verified in milestone 0.7.
+- **Re-activation.** When NM activates a profile that is already active, NM most likely deactivates the old instance before the new one even starts, so the old instance cannot rely on the new one to tell it in time. Before deciding about its chains, the old instance therefore asks libnm whether another activation of the same profile exists; the new instance additionally places a “takeover” marker in the profile's run directory before waiting for the old one (see “Core supervision and cleanup”). Either signal means a re-activation. When the old instance keeps its chains for a re-activation, it leaves its run directory with a “handed over” marker instead of deleting it (the core config with its secrets is deleted; only the markers stay), so that the new instance recognises a takeover even if it never saw the old one active, and writes a `guard-status` entry in the “handing over” state with a timestamp. The banner hides such entries for their first 30 s; the new instance removes the entry when it adopts the chains. So a normal re-activation shows no banner, while a re-activation whose new instance never starts shows the block after 30 s. Milestone 0.7 records which of them actually arrives in time; at least one must, otherwise the design changes before milestone 5.2. If its session had succeeded (or itself ran under an inherited block), the old instance then leaves its chains in place whatever the deactivation reason, and the new instance adopts them as inherited (below), so there is no window without the kill switch; otherwise the old instance removes its chains as usual and the new one starts fresh. Apart from the “handing over” entry above, adopting chains on a takeover writes no `guard-status` entry; a regular entry appears only if the new attempt ends without success.
+- If the session never succeeded (wrong key or password, unreachable server, no handshake), its chains are removed whatever ends it: the kill switch protects a working tunnel and must not leave the user without network because of an error in the profile.
+- **Inherited block.** If `Connect` finds kill switch chains of this profile left over from an earlier session that had succeeded, the attempt installs no kill switch chains of its own, works under the inherited ones, places an “inherited block” marker and, except on a takeover, makes sure the block is listed in `guard-status`. On success, the inherited chains are replaced by the new session's chains in one nftables transaction (same names), or removed if the profile no longer qualifies (kill switch now off, or never-default). If there is no cached server IP for such an attempt (for example, it aged out), `Connect` fails with a logged reason and the block stays. If the attempt fails or is disconnected, even explicitly, the inherited chains stay. They go away only with a successful connect, `plasma-nm-vpn-guard --clear` or a reboot. Example: the server changed its IP while the cached IP is used (see “Route to the server”); the user clears the block.
+- A `guard-status` entry is written only if the profile's kill switch chains actually remain (for example, not after a `--clear` of a live session) and not on a takeover (except the short-lived “handing over” entry). Writers keep entries in a newer format version they do not understand, so that after an upgrade old and new daemon instances can share the file.
+- `plasma-nm-vpn-guard --clear <uuid>` removes that profile's kill switch chains and its `guard-status` entry. A bare `--clear` does this for all profiles except those whose VPN connection NM currently reports as activated or activating, so it never removes the protection of a connection that is up. Run by a regular user, the tool re-executes itself via `pkexec` (a dependency of `plasma-nm-vpn-common`), so polkit asks for administrator credentials; the polkit action id is fixed in milestone 5.3.
+
+**How the user learns about a block.** NM's failure signal carries only a reason code, so hint text cannot be passed through NM. The daemon (or `--daemon-gone` after a crash) writes active blocks to `/run/plasma-nm-vpn/guard-status` (world-readable) and to the journal. The profile editor shows a “Kill switch block active” banner with a “Clear” button (it calls `plasma-nm-vpn-guard`, which elevates via `pkexec`). `VpnUiPlugin::widget()` does not receive the UUID of the profile being edited, so the banner lists all active blocks with their profile names. The `guard-status` format is fixed in milestone 5.3. The README has a section “No internet after a VPN failure”.
+
+### Network changes and sleep
+
+NM's behavior here was verified against the 1.58.1 sources (`src/core/vpn/nm-vpn-connection.c`).
+
+- The daemon passes `NM_VPN_PLUGIN_CAN_PERSIST` in Config, and profiles are created with `vpn.persistent=yes`. Then, when the parent device goes down, NM does not tear down the VPN: it assigns a new device and itself moves the route to the external gateway onto it.
+- The core is bound to the parent device of the VPN connection in NM, not to the “best” device in the system. Otherwise the core's binding and the route to the gateway would diverge: if the old device stays up, NM keeps the VPN on it.
+- **The TUN belongs to the daemon, not to the core.** The daemon creates the TUN `pnv-<8 characters of the UUID>` as a persistent device (owner `plasma-nm-vpn`) before starting the core, and the core attaches to it. Restarting the core therefore does not delete the interface: NM's routes stay, and during the gap traffic is dropped in the TUN instead of leaving directly via the parent device. Whether each core attaches to an existing persistent TUN is verified in milestones 0.4 and 0.6; if one cannot, that core keeps creating its own TUN, and for default-route tunnels the daemon installs a temporary per-UUID block chain (kill switch rules) for the duration of each core restart instead, even with the kill switch off.
+- The daemon monitors its connection's parent device via libnm, and sleep via logind (`PrepareForSleep`). When the device changes, after resume or after three failed liveness checks, it runs the reconnect cycle. If there is no parent device yet (NM makes devices unmanaged on suspend, so after resume one usually appears only later), waiting for it is part of the cycle and counts against its timeout; step 2 starts only once a device exists.
+  1. puts the plugin into `STARTING`. libnm has no public `set_state`, so `g_object_set(plugin, NM_VPN_SERVICE_PLUGIN_STATE, NM_VPN_SERVICE_STATE_STARTING, NULL)` is used. NM moves the connection to ACTIVATING and does not remove the routes. NM handles `STARTING` only on a transition from `STARTED`, so the cycle is started only from the working state;
+  2. recreates the core unit (`StopUnit`, then `StartTransientUnit` with a regenerated config: a garbage-collected unit cannot simply be restarted) with the new binding and the server IP of this session (kept in the run directory); then the core's post-start step: for AmneziaWG, remove a stale UAPI socket before the start, wait until amneziawg-go has attached to the TUN and its UAPI socket appears, then run `awg setconf` again (there is no interface binding to update for it);
+  3. sends Config and `Ip4Config` back to back. NM returns the connection to ACTIVATED and reapplies the routes, the external gateway and DNS;
+  4. runs the liveness check; the cycle counts as successful only when it passes. Otherwise it is repeated with an increasing backoff: from step 1 if the plugin is `STARTED` again (only a new `STARTING` makes NM reread DNS), from step 2 if it is still `STARTING` (step 2 or 3 failed; setting `STARTING` again would be a no-op).
+
+  Without step 1, NM also updates the routes and the gateway, but does not reread DNS: DNS is applied only on the transition to ACTIVATED.
+- NM has no timeout in the reconnecting state. If reconnecting does not succeed within the allotted time (the value is fixed in milestone 5.5), the daemon gives up: it sets the give-up flag (see the kill switch) and calls `nm_vpn_service_plugin_failure`, which moves the connection to `STOPPED`.
+- For can-persist plugins, NM does not retry the connection either after `STOPPED` or after a daemon crash. Reconnecting is handled entirely by the daemon.
+
+### IPv6 inside the tunnel
+
+Phase 2: `Ip6Config`, a ULA address on the TUN.
+
+### Core supervision and cleanup
+
+- **On `Connect`, in this order:**
+  1. Orphan cleanup. If the previous daemon instance of the same profile is still active (NM is re-activating the profile), the new one places the “takeover” marker (see “Leak protection”). It then waits, up to 10 s, until the scope, the guard unit and the core unit of this UUID are all inactive, failed or gone, and otherwise removes its takeover marker and fails `Connect`; waiting for the scope alone is not enough, because the guard unit may still be running `--daemon-gone`. Leftovers (core and guard units, TUN, AmneziaWG UAPI socket, DNS and IPv6 guard chains, any temporary restart block chain) are removed; a leftover run directory is first processed with the same marker logic as `--daemon-gone`, then deleted. Before deleting or creating the TUN `pnv-<8 characters of the UUID>`, the daemon checks that the name does not belong to a live unit of another profile (a UUID prefix collision, possibly deliberate); if it does, `Connect` fails instead of touching it.
+  2. The daemon creates `/run/plasma-nm-vpn/<uuid>/`, moves itself into its scope `plasma-nm-vpn-daemon-<uuid>.scope` and starts the guard unit `plasma-nm-vpn-guard-<uuid>.service`: `Type=oneshot`, `RemainAfterExit=yes`, `BindsTo=` and `After=` the scope, `ExecStop=/usr/bin/plasma-nm-vpn-guard --daemon-gone <uuid>`. The guard unit has no `User=` and no sandbox, so it runs as root and needs no `+` prefix. Transient units get `CollectMode=inactive-or-failed`, so that a stopped unit does not block the next `StartTransientUnit` with the same name.
+  3. It resolves the server name (with a 5 s timeout), creates the persistent TUN, installs the chains (see “Leak protection”) and starts the core unit. Budget against libnm's 60-second connect timer: up to 10 s waiting, 5 s resolution, 15 s readiness. The core unit is ordered `After=` the guard unit, so when the scope goes away systemd stops the core first and only then runs the guard unit's `ExecStop`.
+- **Readiness:** the core has attached to the TUN (checked via netlink) within the allotted time, 15 s by default. NM itself brings the interface up (`IFF_UP`) after `Ip4Config`.
+- **Liveness check.** A created TUN does not mean the server is reachable: sing-box and xray create the TUN without contacting the server, so a wrong password or a dead server would otherwise go unnoticed. So after activation the daemon checks the tunnel end to end:
+  - sing-box and xray: a DNS query (for the root zone) to the profile's first DNS server, sent through the TUN from a socket bound to it (`SO_BINDTODEVICE`; the kernel then sends via the TUN without any route, which milestone 5.4 verifies). It is tunnel traffic to a server the profile already uses. With never-default and no `dns` in the profile, the check queries `1.1.1.1` the same way, with no route added: this is the one extra destination (see “Goals and requirements”), and a route would hijack `1.1.1.1` for another connection that uses it as DNS. Without a route the reply arrives on the TUN while the reverse route points elsewhere, so strict `rp_filter=1` would drop it; milestone 5.4 verifies this and sets loose mode (2) on our TUN if needed;
+  - AmneziaWG: the first handshake. How to reliably trigger it (keepalive or the first packet) is checked in milestone 3.1; the same trigger nudges an idle tunnel before each periodic check, because WireGuard renews handshakes only when there is traffic.
+
+  No success within the allotted time → the daemon gives up. While the connection is up, the check repeats every 60 s (for AmneziaWG: the age of the last handshake against a threshold derived from the profile's rekey and keepalive parameters, by default above the 2-minute rekey interval); three failures in a row start the reconnect cycle. For AmneziaWG the periodic check reads the age only after the nudge's handshake attempt has had time to complete (as a responder the client may legitimately not rekey for about 3 minutes). A stopped server is therefore detected in about three minutes for the proxy cores and in about five to six minutes for AmneziaWG; milestone 5.4 derives the exact bound from the threshold. The check timeout and the handshake-age threshold are fixed in milestone 5.4.
+- **Core unit failure:** after success, the daemon recreates the core using the reconnect cycle (`STARTING`, see “Network changes and sleep”) with an increasing backoff; before success, the daemon gives up. `nm_vpn_service_plugin_failure` is called only when the daemon gives up: libnm itself moves the connection to `STOPPED`, and after that there is nothing left to restart. The failure signal carries only a code, so the details (reason, unit name for `journalctl -u`) are written to the journal.
+- **Disconnect** (explicit or give-up) is done synchronously, before the `disconnect` handler returns: libnm quits the daemon's main loop right after `STOPPED`, so asynchronous cleanup would be cut short. The daemon stops the core unit, deletes the TUN, removes the DNS and IPv6 guard chains and the kill switch chains according to “Leak protection”, updates `guard-status`, deletes `/run/plasma-nm-vpn/<uuid>/` (on a hand-over it keeps the directory with only the markers, see “Leak protection”, Re-activation) and stops the guard unit (its command then finds no run directory, or a handed-over one, and does nothing).
+- **Daemon crash:** NM tears down the connection along with its routes, addresses and DNS, but does not delete the TUN and does not reconnect. systemd stops the core via `BindsTo=` on the daemon's scope, and the guard unit then runs `plasma-nm-vpn-guard --daemon-gone <uuid>`.
+- **`--daemon-gone <uuid>`** acts only if `/run/plasma-nm-vpn/<uuid>/` still exists, that is, the daemon did not finish its own cleanup. It always removes the DNS and IPv6 guard chains and any temporary restart block chain; removes the kill switch chains unless the success marker or the inherited-block marker is present, and otherwise records the block in `guard-status`; removes leftovers (core unit, the persistent TUN, the AmneziaWG UAPI socket); and deletes the run directory. A “takeover” marker keeps the chains for the new instance only together with the success or inherited-block marker (see “Leak protection”, Re-activation), and in that case it writes a `guard-status` entry in the “handing over” state, so that a block left by a crash during a re-activation becomes visible after 30 s if the new instance does not adopt it. With a “handed over” marker the command leaves the chains and the run directory alone: the new instance's orphan cleanup adopts them.
+
+## Testing
+
+- **Unit tests:** link and `.conf` parsers, config generators (golden files for each pinned core version), validators. Parsers and validators are additionally fuzzed.
+- **Integration tests** on GitHub Actions. A Debian forky VM runs under KVM: it is available on standard Linux runners after adding a udev rule for `/dev/kvm`. The fallback is a privileged container with systemd (`--privileged --cgroupns=host`); the sleep and Wi-Fi tests depend on the VM's own kernel and are skipped there. The test VM is driven over `AF_VSOCK` (ssh via systemd-ssh-generator), not over IP, so that kill switch tests with `allow-lan=no` do not cut the control channel; its management NIC stays up with never-default, no automatic DNS and no IPv6, as the one deliberate exception to the bench address rules. Test hooks exist only in a test build of the daemons that is never packaged. Test servers are brought up in a network namespace: hysteria2 on sing-box, VLESS XHTTP Reality on xray, AmneziaWG on amneziawg-go. The bench also has a directly reachable “ISP” DNS server with A and AAAA-only records for the server name, an IPv6 address of the server and an RFC 1918 neighbour for the `allow-lan` checks; test profiles use the bench DNS inside the tunnel (203.0.113.1, which also answers on 1.1.1.1 for the never-default liveness check). The integration suite installs the .deb files built by CI, so that package removal is tested too. The client connects via nmcli. NM does not manage veth by default, so the test bench's client veth is explicitly put under NM management; otherwise it will not become the VPN's parent device. Wi-Fi in the VM and in CI is emulated via `mac80211_hwsim` and `hostapd`. DNS is tested in both modes: Debian's default `resolv.conf` mode (systemd-resolved is not installed by default) and with systemd-resolved. nmcli cannot prompt for our VPN secrets (there is no auth-dialog; plasma-nm asks via `VpnUiPlugin`), so tests pass secrets with `nmcli connection up … passwd-file`. The tests check:
+  - connecting and traffic flow; a wrong password or a dead server is detected by the liveness check;
+  - two simultaneous connections pass traffic and DNS through each other's tunnels without being rejected;
+  - absence of DNS and IPv6 leaks (traffic capture on the physical interface);
+  - the kill switch: a daemon crash after success keeps the block, a failed first connection leaves none, an inherited block survives a failed attempt; reconnecting while kill switch chains remain (using the cached server IP);
+  - `kill -9` of the core: before success → give-up and no traces; after success → the reconnect cycle restores the connection;
+  - restarting NetworkManager while connected with the kill switch → the block stays (fail closed);
+  - a parent device change and reconnect without leaks;
+  - no traces left after a normal disconnect and after `kill -9` of the daemon before success;
+  - cores running without root;
+  - known attack vectors via the profile: wg-quick hooks, paths in `extra`, line breaks.
+- The build, unit tests and integration tests run on every pull request and on every core and plasma-nm update; fuzzing runs on a schedule.
+- The UI is tested manually against a checklist.
+- Sleep is tested in the VM and in CI with a real `systemctl suspend` in s2idle mode woken by `rtcwake`, so that logind itself emits `PrepareForSleep` (the daemon accepts the signal only from logind); suspend on real hardware is checked on the hardware test machine if one is available.
+- All networking experiments and tests run only in a test VM, in CI or on a separate hardware test machine, never on a work machine. A hardware test machine with real Wi-Fi (ssh access) is used for MVP acceptance, if one is available.
+
+## MVP acceptance criteria
+
+- The packages install on a clean Debian forky with KDE from the project's public repository following the README instructions; there are no new dependencies other than our packages (and `pkexec`, if milestone 0.2 found it missing from a stock install).
+- The repository has a README (in English and Russian), LICENSE, `SECURITY.md` and information on the core licenses; the UI is translated into Russian.
+- A profile for each of the three protocols can be created in plasma-nm both manually and by import; it connects and disconnects from the applet.
+- There are no secrets in `vpn.data`; a profile from an unprivileged user does not allow executing code or reading and writing files as root.
+- No DNS and IPv6 leaks with a default-route tunnel; with the kill switch, traffic does not go directly when the tunnel goes down.
+- The connection recovers after switching Wi-Fi ↔ Ethernet and after sleep (the acceptable time is set based on the results of milestone 5.8; Wi-Fi: emulation in the VM, sleep: s2idle suspend in the VM; both also on the hardware test machine, if available).
+- After a disconnect or an abnormal termination, no interfaces, routes, rules, units or processes are left in the system, except for kill switch chains and their `guard-status` entry in the cases described above. The run directory `/run/plasma-nm-vpn/<uuid>/` is removed too, by the daemon on disconnect or by `--daemon-gone` after a crash.
+
+## Research findings
+
+This section records research from open sources as of 22 November 2026 (the row on Xray's TUN was updated on 26 November). Items about versions need to be rechecked; some of the information comes from the release notes of the closed-source Happ client and can only be confirmed with a prototype.
+
+| Question | Finding |
+|--------|-----------|
+| Does AmneziaWG 3.1 exist? | Yes. It includes the 2.0 and 3.0 parameters (Jc, Jmin, Jmax, S1–S4, H1–H4, I1–I5, HeaderProtectionKey, ContentPaddingAddition, timing randomization, MaxHandshakeAttempts) and two boolean flags, `random_trailers` and `disable_cookies`. According to one of the installers, the kernel module for 3.1 has a kernel-version constraint around 6.7 (the source's wording is ambiguous: it can mean either “at most 6.7” or “at least 6.7”; the project does not use the kernel module); userspace amneziawg-go supports 3.1 |
+| Can Xray do hysteria2? | There is an outbound in the 26.x series, but the tracker has open issues: a broken hysteria outbound and Salamander incompatibility with the Hysteria2 server. It should not be relied on for hysteria2; sing-box is the better choice |
+| XHTTP in sing-box? | No, only in xray; other clients run XHTTP through a local xray as a SOCKS bridge under sing-box's TUN |
+| Xray TUN inbound on Linux? | Yes. The built-in TUN inbound appeared in January 2026 (Windows, Linux, Android); since v26.10.10 it runs on its own TCP/IP stack instead of gVisor. By default it only brings up the interface, so routes can be managed by NM. Caveats: auto-detection of the external interface was lost with the default route via the TUN (issue 6412, version 26.6.27; fixed by [PR #6413](https://github.com/XTLS/Xray-core/pull/6413), the first stable version with the fix is v26.10.21, verified on 26 November); without a host route to the server, a loop occurs. The module README still marks TUN as a feature for advanced users, and the module is under active development. Happ on Linux, judging by its release notes, uses tun2proxy |
+| NetworkManager-ssh | A tunnel via `ssh -w`; requires `PermitTunnel yes` and tun permissions; no obfuscation. The editor is mainly for GNOME; an example of a finished NM plugin |
+| Happ for Linux | A closed-source GUI client based on Xray, with .deb/.rpm/pkg packages. According to its README it supports VLESS Reality, VMess, Trojan, Shadowsocks, Socks; hysteria2, TUIC, AnyTLS, ShadowTLS and AmneziaWG are not listed. Its daemon runs as root and manages routes itself, so it will conflict with an NM plugin. It does not replace the project, but it shows the typical TUN problems on Linux |
+
+Sources: [AmneziaWG 3.1](https://amnezia.org/blog/amneziawg-3-1-is-here), [AmneziaWG documentation](https://docs.amnezia.org/documentation/amnezia-wg/), [GL.iNet: AmneziaWG 3.1](https://docs.gl-inet.com/router/en/4/faq/amneziawg_obfuscation/), [Xray-core #5619](https://github.com/XTLS/Xray-core/issues/5619), [Xray-core #5712](https://github.com/XTLS/Xray-core/issues/5712), [Socksicle](https://github.com/Socksicle/desktop/releases), [Happ-docs](https://github.com/Flyfrog-LLC/Happ-docs), [happ-desktop releases](https://github.com/Happ-proxy/happ-desktop/releases/), [Happ 4.6.1 release](https://github.com/Happ-proxy/happ-desktop/releases/tag/4.6.1), [AUR: happ-desktop-bin](https://aur.archlinux.org/packages/happ-desktop-bin)
+
+Sources (Xray TUN): [Xray-core #4292](https://github.com/XTLS/Xray-core/issues/4292), [TUN module README](https://github.com/XTLS/Xray-core/blob/main/proxy/tun/README.md), [PR #7130](https://github.com/XTLS/Xray-core/pull/7130), [PR #6398](https://github.com/XTLS/Xray-core/pull/6398), [Issue #6412](https://github.com/XTLS/Xray-core/issues/6412)
+
+## Open questions and risks
+
+Verify on a prototype (stage 0):
+
+The checks are carried out in a test VM, in CI or on a separate hardware test machine, never on a work machine.
+
+- [ ] Do sing-box, xray and amneziawg-go work as the `plasma-nm-vpn` user with `CAP_NET_ADMIN` and `CAP_NET_RAW` in the systemd sandbox? The official units of xray and sing-box 1.14.4 are set up this way; amneziawg-go's code has no root check, and the socket directory is handled via tmpfiles.d. This needs to be confirmed specifically in our sandbox.
+- [ ] xray's built-in TUN at the pinned version (at least v26.10.21) with an explicit `sockopt.interface` and the default route via the TUN: is there a loop; does UDP (DNS queries) pass through the TUN and VLESS XHTTP?
+- [ ] Binding the core unit and the guard unit to the daemon's transient scope (`BindsTo=`): on `kill -9` of the daemon, does systemd stop the core first and then run the guard unit's `ExecStop` as root; does `LoadCredential=` work in transient units created over D-Bus (milestone 0.5)? Does moving the real plugin out of NetworkManager's cgroup interfere with NM itself, and which deactivation reason does the plugin see on `nmcli connection down`, on re-activation of the same profile and on `systemctl restart NetworkManager`, and on re-activation which signal reaches the old instance in time: libnm showing another activation of the same profile, or the takeover marker (milestone 0.7, go/no-go for 5.2; see “Leak protection”, Re-activation)?
+- [ ] Do sing-box, xray and amneziawg-go attach to an existing persistent TUN created by the daemon (milestones 0.4 and 0.6)? Otherwise the fallback from “Network changes and sleep” applies.
+- [ ] Is `/dev/vhost-vsock` available on standard GitHub runners (milestone 1.4)? Otherwise the `allow-lan=no` tests need another non-IP control channel to the VM (for example a virtio-serial console).
+- [ ] A flat repository in release assets on the project's test repository: apt update and install on forky, renaming of assets with `+` in the name.
+
+Before the first publication:
+
+- [ ] Ask in a sing-box issue whether the name term in its license allows the package name `plasma-nm-vpn-sing-box`.
+
+Decide before phase 2:
+
+- [ ] Where to get rule-sets for the rule-based mode and how to update them. To be decided when implementing the mode. Options: ship them in the package and update them with releases; have the core download them through the tunnel (another exception to the network requests requirement); only the user's own rules.
+- [ ] The design of subscriptions, to be decided during implementation. Who updates them in the background (a user systemd timer or a kded module), and with what privileges it modifies NM profiles. Where secrets go: writing to KWallet from the background is awkward. Which route the request takes: through the tunnel if it is up, otherwise directly, and a direct request to the subscription address is visible to the censor.
+
+Risks:
+
+- **The `VpnUiPlugin` API is internal.** Its ABI has not changed throughout the 6.x series, and CI compares the headers against every new plasma-nm in sid. Residual risk: if the ABI changes and the fix does not come out within the roughly 5 days of migration from sid, the editor may misbehave. Without the plugin, the Plasma applet refuses to connect such a VPN; nmcli and autoconnect keep working.
+- **The cores and their config formats change quickly.** Mitigated by pinned versions, per-version templates, golden tests and integration tests on every update.
+- **The allowlists of `extra` keys and AmneziaWG parameters** have to be maintained together with the cores.
+- **Link formats are incompatible across clients.** Only the listed formats are supported.
+- **All cores share one user.** A core compromised by a malicious server could read the configs and secrets of other active profiles; with `CAP_NET_ADMIN` and `CAP_NET_RAW` in the host network namespace it could also sniff interfaces, change routes and our nftables chains (the kill switch included) and attach to another profile's persistent TUN during that core's restart. Accepted for the MVP; per-unit isolation is a phase 2 candidate (see “Architecture”).
+- **Supply chain.** Compromise of the repository, CI or signing key gives root on all users' machines. Mitigated by the measures in the section “Distribution and supply chain”.
+- **sing-box is moving away from running without root.** On 25 November 2026, the commit “Run systemd service as root” (e3647efd3) landed in the `testing` branch: it removes the `sing-box` user and capabilities from the official unit. It is not in a release yet. Running without root stops being a scenario that upstream tests, and regressions there will have to be caught by our integration tests. The course of action will be decided if a regression occurs. Options: stay on the last working version and carry a patch (sing-box is then built from source); run the core as root in the same sandbox, replacing the user-based kill switch exemption with a match on the unit's cgroup.
+- **Repackaging third-party binaries** requires complying with the core licenses (sources of the GPL cores, sing-box's name term) in every release.
+
+## Work plan
+
+The first backend to be built is the one that exercises all the hard parts of the shared library (TUN addressing, DNS, route to the server, interface binding): Hysteria2 on sing-box. The UI is built once the tunnels come up reliably via nmcli.
+
+Stages and milestones (each no longer than 2 days) are laid out in [plan.md](plan.md). In brief:
+
+0. Test bench and prototypes for the open questions.
+1. Infrastructure: repository, packages, release pipeline, integration test bench in CI.
+2. Shared library and Hysteria2 via nmcli.
+3. AmneziaWG via nmcli.
+4. VLESS XHTTP Reality via nmcli.
+5. Kill switch, inherited block and takeover, block status, liveness check, reconnect, network changes and sleep.
+6. plasma-nm editors, kill switch banner, import and export.
+7. MVP release.
+8. Phase 2.
