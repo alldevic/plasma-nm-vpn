@@ -1,0 +1,287 @@
+#!/bin/bash
+# Bring up the test bench (see README.md): stand-up [hy2|vless|awg|all]. Run as root.
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+bin=${PNV_BIN:-/opt/pnv-proto/bin}
+sec=$here/secrets
+run=/run/pnv-stand
+saved=/var/lib/pnv-stand/mgmt
+what=${1:-all}
+
+case $what in hy2|vless|awg|all) ;; *) echo "usage: $0 [hy2|vless|awg|all]" >&2; exit 2;; esac
+
+ns() { ip netns exec stand "$@"; }
+
+# start NAME CMD...: run CMD in the netns in the background, log to $run/NAME.log.
+start() {
+  local name=$1; shift
+  ns setsid "$@" >"$run/$name.log" 2>&1 < /dev/null &
+}
+
+wait_port() { # proto port
+  for _ in $(seq 50); do
+    ns ss -Hln"${1:0:1}" "sport = :$2" | grep -q . && return
+    sleep 0.1
+  done
+  echo "nothing listens on $1/$2" >&2; exit 1
+}
+
+secrets() {
+  [ -f "$sec/env" ] && return
+  mkdir -p "$sec"
+  chmod 700 "$sec"
+  local x awgs awg4 awg6
+  x=$("$bin/xray" x25519)
+  awgs=$("$bin/awg" genkey)
+  awg4=$("$bin/awg" genkey)
+  awg6=$("$bin/awg" genkey)
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 \
+    -subj /CN=srv.stand.test -addext subjectAltName=DNS:srv.stand.test,DNS:srv6.stand.test \
+    -keyout "$sec/hy2.key" -out "$sec/hy2.crt" 2>/dev/null
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 \
+    -subj /CN=www.stand.test -addext subjectAltName=DNS:www.stand.test \
+    -keyout "$sec/target.key" -out "$sec/target.crt" 2>/dev/null
+  cat > "$sec/env" <<EOF
+HY2_PASSWORD=$(openssl rand -hex 16)
+HY2_OBFS=$(openssl rand -hex 16)
+VLESS_UUID=$("$bin/xray" uuid)
+VLESS_PATH=/$(openssl rand -hex 8)
+VLESS_SHORT_ID=$(openssl rand -hex 8)
+REALITY_PRIVATE=$(sed -n 's/^PrivateKey: //p' <<<"$x")
+REALITY_PUBLIC=$(sed -n 's/^Password (PublicKey): //p' <<<"$x")
+AWG_SERVER_KEY=$awgs
+AWG_SERVER_PUB=$("$bin/awg" pubkey <<<"$awgs")
+AWG_CLIENT4_KEY=$awg4
+AWG_CLIENT4_PUB=$("$bin/awg" pubkey <<<"$awg4")
+AWG_CLIENT6_KEY=$awg6
+AWG_CLIENT6_PUB=$("$bin/awg" pubkey <<<"$awg6")
+AWG_HPK=$("$bin/awg" genkey)
+EOF
+}
+
+configs() {
+  . "$sec/env"
+  mkdir -p "$sec/client"
+  local awg_params="Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 37
+S2 = 91
+S3 = 23
+S4 = 16
+H1 = 1100000000-1199999999
+H2 = 1200000000-1299999999
+H3 = 1300000000-1399999999
+H4 = 1400000000-1499999999
+I1 = <b 0xc2000000010840><r 32>
+HeaderProtectionKey = $AWG_HPK
+ContentPaddingAddition = 0-32"
+
+  cat > "$run/hy2.json" <<EOF
+{
+  "log": {"level": "warn"},
+  "inbounds": [$(for a in 198.51.100.1 2001:db8:100::1; do printf '%s' "
+    {\"type\": \"hysteria2\", \"listen\": \"$a\", \"listen_port\": 443,
+     \"obfs\": {\"type\": \"salamander\", \"password\": \"$HY2_OBFS\"},
+     \"users\": [{\"name\": \"pnv\", \"password\": \"$HY2_PASSWORD\"}],
+     \"tls\": {\"enabled\": true, \"alpn\": [\"h3\"], \"certificate_path\": \"$sec/hy2.crt\", \"key_path\": \"$sec/hy2.key\"}},"; done | sed '$ s/,$//')
+  ],
+  "outbounds": [{"type": "direct"}]
+}
+EOF
+
+  cat > "$run/vless.json" <<EOF
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [$(for a in 198.51.100.1 2001:db8:100::1; do printf '%s' "
+    {\"listen\": \"$a\", \"port\": 443, \"protocol\": \"vless\",
+     \"settings\": {\"clients\": [{\"id\": \"$VLESS_UUID\"}], \"decryption\": \"none\"},
+     \"streamSettings\": {\"network\": \"xhttp\", \"xhttpSettings\": {\"path\": \"$VLESS_PATH\"},
+       \"security\": \"reality\", \"realitySettings\": {\"target\": \"127.0.0.1:8443\", \"serverNames\": [\"www.stand.test\"],
+         \"privateKey\": \"$REALITY_PRIVATE\", \"shortIds\": [\"$VLESS_SHORT_ID\"]}}},"; done | sed '$ s/,$//')
+  ],
+  "outbounds": [{"protocol": "freedom", "settings": {"finalRules": [
+    {"action": "allow", "ip": ["203.0.113.0/24", "1.1.1.1", "2001:db8:113::/48"]}]}}]
+}
+EOF
+
+  cat > "$run/awg.conf" <<EOF
+[Interface]
+PrivateKey = $AWG_SERVER_KEY
+ListenPort = 51820
+$awg_params
+
+# One peer per address family: amneziawg-go loses its first response after a peer switches family.
+[Peer]
+PublicKey = $AWG_CLIENT4_PUB
+AllowedIPs = 100.64.0.2/32
+
+[Peer]
+PublicKey = $AWG_CLIENT6_PUB
+AllowedIPs = 100.64.0.3/32
+EOF
+
+  local host port key
+  for v in 4 6; do
+    host=198.51.100.1 key=$AWG_CLIENT4_KEY
+    [ $v = 6 ] && host=srv6.stand.test key=$AWG_CLIENT6_KEY
+    port=$((1080 + (v == 6)))
+    cat > "$sec/client/hy2-$v.json" <<EOF
+{
+  "log": {"level": "warn"},
+  "dns": {"servers": [{"type": "local", "tag": "local"}]},
+  "inbounds": [{"type": "socks", "listen": "127.0.0.1", "listen_port": $port}],
+  "outbounds": [{"type": "hysteria2", "tag": "proxy", "server": "$host", "server_port": 443,
+    "password": "$HY2_PASSWORD", "obfs": {"type": "salamander", "password": "$HY2_OBFS"},
+    "tls": {"enabled": true, "server_name": "srv.stand.test", "alpn": ["h3"], "certificate_path": "$sec/hy2.crt"}}],
+  "route": {"default_domain_resolver": "local", "final": "proxy"}
+}
+EOF
+    port=$((1082 + (v == 6)))
+    cat > "$sec/client/vless-$v.json" <<EOF
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [{"listen": "127.0.0.1", "port": $port, "protocol": "socks", "settings": {"udp": true}}],
+  "outbounds": [{"protocol": "vless",
+    "settings": {"vnext": [{"address": "$host", "port": 443, "users": [{"id": "$VLESS_UUID", "encryption": "none"}]}]},
+    "streamSettings": {"network": "xhttp", "xhttpSettings": {"path": "$VLESS_PATH"},
+      "security": "reality", "realitySettings": {"serverName": "www.stand.test", "fingerprint": "chrome",
+        "password": "$REALITY_PUBLIC", "shortId": "$VLESS_SHORT_ID"}}}]
+}
+EOF
+    cat > "$sec/client/awg-$v.conf" <<EOF
+[Interface]
+PrivateKey = $key
+$awg_params
+
+[Peer]
+PublicKey = $AWG_SERVER_PUB
+Endpoint = $host:51820
+AllowedIPs = 100.64.0.0/24, 203.0.113.0/24, 1.1.1.1/32
+PersistentKeepalive = 25
+EOF
+  done
+}
+
+net() {
+  ip netns add stand
+  ip link add stand-cli type veth peer name stand-srv netns stand
+  ns sysctl -qw net.ipv6.conf.all.accept_dad=0 net.ipv6.conf.default.accept_dad=0
+  ns ip link set lo up
+  ns ip addr add 198.51.100.1/32 dev lo
+  ns ip addr add 2001:db8:100::1/128 dev lo
+  ns ip link add inet0 type dummy
+  for a in 203.0.113.1/32 1.1.1.1/32 2001:db8:113::1/128; do ns ip addr add $a dev inet0; done
+  ns ip link set inet0 up
+  # A server has a default route; here it leads nowhere.
+  ns ip route add default dev inet0
+  ns ip -6 route add default dev inet0
+  ns ip addr add 192.0.2.1/24 dev stand-srv
+  ns ip addr add 192.168.77.1/24 dev stand-srv
+  ns ip addr add 2001:db8:1::1/64 dev stand-srv nodad
+  ns ip link set stand-srv up
+  # Reply from the server address, as a server with one public address does: amneziawg-go
+  # answers from the route's source, and the client would roam to the gateway address.
+  ns ip route replace 192.0.2.0/24 dev stand-srv proto kernel scope link src 198.51.100.1
+  ns ip -6 route replace 2001:db8:1::/64 dev stand-srv proto kernel metric 256 src 2001:db8:100::1
+  # The "internet" is reachable only through the tunnel: direct traffic to it is a leak.
+  ns nft -f - <<'EOF'
+table inet stand {
+  chain input {
+    type filter hook input priority 0;
+    iifname "stand-srv" ip daddr { 203.0.113.0/24, 1.1.1.1 } drop
+    iifname "stand-srv" ip6 daddr 2001:db8:113::/48 drop
+  }
+}
+EOF
+  mkdir -p /etc/netns/stand
+  echo "nameserver 203.0.113.1" > /etc/netns/stand/resolv.conf
+
+  local dns=(dnsmasq --conf-file=/dev/null --keep-in-foreground --log-facility=- --log-queries
+    --no-resolv --no-hosts --bind-interfaces --user=nobody --group=nogroup --pid-file=)
+  start dns-isp "${dns[@]}" --listen-address=192.0.2.1,2001:db8:1::1 \
+    --auth-server=ns.isp.test,192.0.2.1 --auth-zone=stand.test \
+    --host-record=srv.stand.test,198.51.100.1,2001:db8:100::1 --host-record=srv6.stand.test,2001:db8:100::1
+  start dns-inet "${dns[@]}" --listen-address=203.0.113.1,1.1.1.1,2001:db8:113::1 \
+    --auth-server=ns.stand.test,203.0.113.1 --auth-zone=. --auth-zone=stand.test \
+    --host-record=stand.test,203.0.113.1,2001:db8:113::1 \
+    --host-record=srv.stand.test,198.51.100.1,2001:db8:100::1 --host-record=srv6.stand.test,2001:db8:100::1
+
+  mkdir -p "$run/www-inet" "$run/www-lan"
+  echo "pnv stand: internet" > "$run/www-inet/index.html"
+  echo "pnv stand: lan" > "$run/www-lan/index.html"
+  start http-inet4 python3 -m http.server -b 203.0.113.1 -d "$run/www-inet" 80
+  start http-inet6 python3 -m http.server -b 2001:db8:113::1 -d "$run/www-inet" 80
+  start http-lan python3 -m http.server -b 192.168.77.1 -d "$run/www-lan" 80
+}
+
+# The client side: stand-cli under NM with the only default routes and DNS; the management
+# connection keeps its address but loses the default route, DNS and IPv6.
+client() {
+  cat > /etc/NetworkManager/conf.d/90-pnv-stand.conf <<'EOF'
+[main]
+no-auto-default+=interface-name:stand-cli
+
+[device-pnv-stand]
+match-device=interface-name:stand-cli
+managed=1
+EOF
+  nmcli general reload conf
+  nmcli device set stand-cli managed yes
+
+  # The profile change is persistent, so are the saved values: stand-down must work after a reboot.
+  local dev mgmt
+  if [ ! -f "$saved" ]; then
+    dev=$(ip -4 route show default | awk '{print $5; exit}')
+    [ -n "$dev" ] || { echo "no default route to find the management connection" >&2; exit 1; }
+    mgmt=$(nmcli -g GENERAL.CONNECTION device show "$dev")
+    mkdir -p "${saved%/*}"
+    { echo "$mgmt"; nmcli -g ipv4.never-default,ipv4.ignore-auto-dns,ipv6.method connection show "$mgmt"; } > "$saved"
+  fi
+  mgmt=$(head -n 1 "$saved")
+  nmcli connection modify "$mgmt" ipv4.never-default yes ipv4.ignore-auto-dns yes ipv6.method disabled
+  nmcli device reapply "$(nmcli -g GENERAL.DEVICES connection show "$mgmt")"
+
+  nmcli connection delete stand >/dev/null 2>&1 || true
+  nmcli connection add type ethernet con-name stand ifname stand-cli \
+    ipv4.method manual ipv4.addresses 192.0.2.2/24,192.168.77.2/24 ipv4.gateway 192.0.2.1 ipv4.dns 192.0.2.1 \
+    ipv6.method manual ipv6.addresses 2001:db8:1::2/64 ipv6.gateway 2001:db8:1::1 >/dev/null
+  nmcli --wait 30 connection up stand >/dev/null
+  # NM reports the connection up before IPv6 DAD ends; until then the kernel sends from ::1.
+  for _ in $(seq 100); do
+    [ -z "$(ip -6 addr show dev stand-cli tentative)" ] && return
+    sleep 0.1
+  done
+  echo "stand-cli: IPv6 addresses still tentative" >&2; exit 1
+}
+
+servers() {
+  if [[ $what == hy2 || $what == all ]] && [ ! -f "$run/hy2.up" ]; then
+    start hy2 "$bin/sing-box" run -c "$run/hy2.json"
+    wait_port udp 443
+    touch "$run/hy2.up"
+  fi
+  if [[ $what == vless || $what == all ]] && [ ! -f "$run/vless.up" ]; then
+    start reality-target "$here/tls-target" 127.0.0.1 8443 "$sec/target.crt" "$sec/target.key"
+    start vless "$bin/xray" run -c "$run/vless.json"
+    wait_port tcp 443
+    touch "$run/vless.up"
+  fi
+  if [[ $what == awg || $what == all ]] && [ ! -f "$run/awg.up" ]; then
+    ns "$bin/amneziawg-go" awg-srv 2>"$run/awg.log"
+    ns "$bin/awg" setconf awg-srv "$run/awg.conf"
+    ns ip addr add 100.64.0.1/24 dev awg-srv
+    ns ip link set awg-srv up
+    touch "$run/awg.up"
+  fi
+}
+
+mkdir -p "$run"
+secrets
+configs
+if [ ! -e /run/netns/stand ]; then
+  net
+  client
+fi
+servers

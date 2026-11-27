@@ -8,6 +8,10 @@ qt6-base-dev     6.11.2+dfsg-8 (libqt6core6t64 6.11.2+dfsg-8)
 systemd          262.2-1
 apt              3.3.7
 nftables         1.1.7-3
+golang-go        2:1.27~1 (go1.27.4), for proto/stand/fetch-cores
+
+Cores in /opt/pnv-proto/bin (since 0.3): sing-box 1.14.4, xray 26.11.9,
+  amneziawg-go v3.1.20261116 (reports 0.0.20250522), awg v3.1.20260812.
 
 pkexec: not installed in a stock install (task-kde-desktop); only rtkit
   references it (rdepends --installed), so it is a new dependency for users.

@@ -22,7 +22,7 @@ runcmd:
   - sh -c '{ dpkg-query -W -f="\${Status}\n" pkexec 2>/dev/null || echo "not installed"; apt-cache rdepends --installed pkexec; } > /root/pkexec-stock.txt'
   - >-
     DEBIAN_FRONTEND=noninteractive apt-get install -y
-    build-essential cmake pkgconf git rsync
+    build-essential cmake pkgconf git rsync golang-go unzip
     libnm-dev libglib2.0-dev libjson-glib-dev
     qt6-base-dev extra-cmake-modules libkf6coreaddons-dev libkf6widgetsaddons-dev libkf6i18n-dev libkf6networkmanagerqt-dev
     tcpdump bind9-dnsutils dnsmasq-base python3 curl openssl nftables iproute2 iw hostapd

@@ -1,0 +1,27 @@
+#!/bin/bash
+# Tear down the test bench and restore the management connection. Run as root.
+set -uo pipefail
+
+run=/run/pnv-stand
+saved=/var/lib/pnv-stand/mgmt
+
+if [ -e /run/netns/stand ]; then
+  ip netns pids stand | xargs -r kill
+  for _ in $(seq 30); do [ -z "$(ip netns pids stand)" ] && break; sleep 0.1; done
+  ip netns pids stand | xargs -r kill -9
+  ip netns del stand
+fi
+ip link del stand-cli 2>/dev/null
+
+nmcli connection delete stand >/dev/null 2>&1
+rm -f /etc/NetworkManager/conf.d/90-pnv-stand.conf
+nmcli general reload conf
+
+if [ -f "$saved" ]; then
+  { read -r mgmt; read -r never; read -r nodns; read -r v6; } < "$saved"
+  nmcli connection modify "$mgmt" ipv4.never-default "$never" ipv4.ignore-auto-dns "$nodns" ipv6.method "$v6"
+  dev=$(nmcli -g GENERAL.DEVICES connection show "$mgmt")
+  [ -n "$dev" ] && nmcli device reapply "$dev"
+fi
+
+rm -rf "$run" "${saved%/*}" /etc/netns/stand

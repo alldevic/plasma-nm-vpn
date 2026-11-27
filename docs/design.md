@@ -28,7 +28,7 @@ The project is installed by third-party users on their own machines, so the assu
 ## Scope
 
 - **MVP:** AmneziaWG, Hysteria2, VLESS XHTTP Reality; IP-based routing via NM; import of links and `.conf`; DNS and IPv6 leak protection; kill switch.
-- **Phase 2:** TUIC, AnyTLS, ShadowTLS (each as a separate entry in the “Add VPN” list); rule-based routing; IPv6 inside the tunnel; subscriptions with background updates; import of client JSON configs and `vpn://` from AmneziaVPN.
+- **Phase 2:** TUIC, AnyTLS, ShadowTLS (each as a separate entry in the “Add VPN” list); rule-based routing; IPv6 inside the tunnel; subscriptions with background updates; the AmneziaWG kernel module as an alternative to amneziawg-go; import of client JSON configs and `vpn://` from AmneziaVPN.
 
 ## Protocols and backends
 
@@ -37,7 +37,7 @@ The six protocols come down to three cores, and WireGuard needs no work: it is a
 | #  | Protocol            | Core               | Phase  | Notes                                                                      |
 |----|---------------------|--------------------|--------|----------------------------------------------------------------------------|
 | 01 | VLESS XHTTP Reality | xray               | MVP    | XHTTP exists only in xray; xray's built-in TUN inbound is used             |
-| 02 | AmneziaWG (3.1)     | amneziawg-go + awg | MVP    | userspace only, the kernel module is not used                              |
+| 02 | AmneziaWG (3.1)     | amneziawg-go + awg | MVP    | MVP: userspace only; the kernel module comes in phase 2                    |
 | 03 | WireGuard           | stock NM           | —      | no plugin needed                                                           |
 | 04 | Hysteria2           | sing-box           | MVP    | Salamander obfuscation, port hopping                                       |
 | 05 | TUIC                | sing-box           | 2      |                                                                            |
@@ -380,6 +380,7 @@ Decide before phase 2:
 
 - [ ] Where to get rule-sets for the rule-based mode and how to update them. To be decided when implementing the mode. Options: ship them in the package and update them with releases; have the core download them through the tunnel (another exception to the network requests requirement); only the user's own rules.
 - [ ] The design of subscriptions, to be decided during implementation. Who updates them in the background (a user systemd timer or a kded module), and with what privileges it modifies NM profiles. Where secrets go: writing to KWallet from the background is awkward. Which route the request takes: through the tunnel if it is up, otherwise directly, and a direct request to the subscription address is visible to the censor.
+- [ ] How the AmneziaWG kernel module is supported. It is not in Debian, so it would come as DKMS (amneziawg-linux-kernel-module), which breaks on new forky kernels; open: whether it is a separate optional package, how the daemon picks the module or amneziawg-go (per profile or automatically when the module loads), and how the interface fits the daemon-owned TUN and the unprivileged core unit, since the module needs neither.
 
 Risks:
 
