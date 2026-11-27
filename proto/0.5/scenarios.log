@@ -1,0 +1,67 @@
+== start from a service (as NM)
+  daemon 15064 cgroup: /system.slice/plasma-nm-vpn-daemon-1a2b3c4d-0000-4000-8000-000000000000.scope
+  guard ExecStart: []
+  fetch: pnv stand: internet
+  units:   daemon=active/running core=active/running guard=active/exited 
+  tun:     present   core procs: 1   chains: 2   run dir: present
+== credentials
+  source: -rw------- root, dir drwx------; credential: -r--r----- root
+  pnv reads source: no; pnv reads credential: no
+  plasma-nm-vpn outside the unit reads credential: YES
+  source deleted: core active, fetch pnv stand: internet
+  SIGUSR1 without source: core inactive (plasma-nm-vpn-core-1a2b3c4d-0000-4000-8000-000000000000.service: Main process exited, code=exited, s)
+== SIGUSR1: recreate the core only
+  core active, guard active, fetch: pnv stand: internet
+  units:   daemon=active/running core=active/running guard=active/exited 
+  tun:     present   core procs: 1   chains: 2   run dir: present
+== SIGTERM
+  done in 123 ms
+  units:   daemon=active/running 
+  tun:     gone   core procs: 0   chains: 0   run dir: gone
+  guard:   guard-cleanup 08:15:40.999: uid=0 CapEff:000001ffffffffff core=inactive
+  guard:   nothing to do
+== kill -9 of the daemon, run 1
+  guard inactive after 1135 ms
+  units:   
+  tun:     gone   core procs: 0   chains: 0   run dir: gone
+  guard:   guard-cleanup 08:15:40.999: uid=0 CapEff:000001ffffffffff core=inactive
+  guard:   nothing to do
+  guard:   guard-cleanup 08:15:42.581: uid=0 CapEff:000001ffffffffff core=inactive
+  guard:   cleaned up pnv-1a2b3c4d, chains, /run/plasma-nm-vpn/1a2b3c4d-0000-4000-8000-000000000000
+  order: 08:15:41.004836 guard-cleanup[15314]: guard-cleanup 08:15:40.999:;08:15:41.005002 guard-cleanup[15314]: nothing to;08:15:41.005321 systemd[1]: guard Deactivated;08:15:41.005436 systemd[1]: Stopped guard;08:15:42.556091 systemd[1]: Stopped core;08:15:42.589183 guard-cleanup[15467]: guard-cleanup 08:15:42.581:;08:15:42.665375 guard-cleanup[15467]: cleaned up;08:15:42.666320 systemd[1]: guard Deactivated;08:15:42.666451 systemd[1]: Stopped guard;
+== kill -9 of the daemon, run 2
+  guard inactive after 1085 ms
+  units:   
+  tun:     gone   core procs: 0   chains: 0   run dir: gone
+  guard:   guard-cleanup 08:15:42.581: uid=0 CapEff:000001ffffffffff core=inactive
+  guard:   cleaned up pnv-1a2b3c4d, chains, /run/plasma-nm-vpn/1a2b3c4d-0000-4000-8000-000000000000
+  guard:   guard-cleanup 08:15:43.939: uid=0 CapEff:000001ffffffffff core=inactive
+  guard:   cleaned up pnv-1a2b3c4d, chains, /run/plasma-nm-vpn/1a2b3c4d-0000-4000-8000-000000000000
+  order: 08:15:42.556091 systemd[1]: Stopped core;08:15:42.589183 guard-cleanup[15467]: guard-cleanup 08:15:42.581:;08:15:42.665375 guard-cleanup[15467]: cleaned up;08:15:42.666320 systemd[1]: guard Deactivated;08:15:42.666451 systemd[1]: Stopped guard;08:15:43.921266 systemd[1]: Stopped core;08:15:43.945993 guard-cleanup[15633]: guard-cleanup 08:15:43.939:;08:15:44.001403 guard-cleanup[15633]: cleaned up;08:15:44.002533 systemd[1]: guard Deactivated;08:15:44.002752 systemd[1]: Stopped guard;
+== kill -9 of the daemon, run 3
+  guard inactive after 1134 ms
+  units:   
+  tun:     gone   core procs: 0   chains: 0   run dir: gone
+  guard:   cleaned up pnv-1a2b3c4d, chains, /run/plasma-nm-vpn/1a2b3c4d-0000-4000-8000-000000000000
+  guard:   guard-cleanup 08:15:45.279: uid=0 CapEff:000001ffffffffff core=inactive
+  guard:   cleaned up pnv-1a2b3c4d, chains, /run/plasma-nm-vpn/1a2b3c4d-0000-4000-8000-000000000000
+  order: 08:15:44.001403 guard-cleanup[15633]: cleaned up;08:15:44.002533 systemd[1]: guard Deactivated;08:15:44.002752 systemd[1]: Stopped guard;08:15:45.252893 systemd[1]: Stopped core;08:15:45.287133 guard-cleanup[15799]: guard-cleanup 08:15:45.279:;08:15:45.369563 guard-cleanup[15799]: cleaned up;08:15:45.371078 systemd[1]: guard Deactivated;08:15:45.371295 systemd[1]: Stopped guard;
+== stop the service that started the daemon
+  daemon alive: yes, core active
+== kill -9 of the core
+  scope active, guard active, core inactive
+  units:   daemon=active/running guard=active/exited 
+  tun:     present   core procs: 0   chains: 2   run dir: present
+== restart with the same UUID right after a crash
+  new daemon up after 1248 ms; fake-daemon[16081] 08:15:49.046 orphan wait 1069 ms
+  units:   daemon=active/running core=active/running guard=active/exited 
+  tun:     present   core procs: 1   chains: 2   run dir: present
+== the same, with guard-cleanup failing once
+  new daemon up after 1352 ms; fake-daemon[16236] 08:15:50.320 orphan wait 1073 ms
+  units:   daemon=active/running core=active/running guard=active/exited 
+  tun:     present   core procs: 1   chains: 2   run dir: present
+== second daemon while the first is alive
+  gave up after 10633 ms: fake-daemon[16389] 08:16:01.220 plasma-nm-vpn-daemon-1a2b3c4d-0000-4000-8000-000000000000.scope still active after 10 s
+  StartTransientUnit for the live scope: Call failed: Unit plasma-nm-vpn-daemon-1a2b3c4d-0000-4000-8000-000000000000.scope was already loaded or has a fragment file.
+  units:   daemon=active/running 
+  tun:     gone   core procs: 0   chains: 0   run dir: gone

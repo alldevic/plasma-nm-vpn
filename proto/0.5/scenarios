@@ -1,0 +1,92 @@
+#!/bin/bash
+# Run the 0.5 scenarios against fake-daemon and print what each left behind. Run as root,
+# with the bench up (proto/stand/stand-up hy2) and the 0.4 configs (proto/0.4/make-configs).
+set -uo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+U=1a2b3c4d-0000-4000-8000-000000000000
+tun=pnv-${U:0:8}
+run=/run/plasma-nm-vpn/$U
+scope=plasma-nm-vpn-daemon-$U.scope guard=plasma-nm-vpn-guard-$U.service core=plasma-nm-vpn-core-$U.service
+n=0
+
+ms() { echo $(( ($(date +%s%N) - $1) / 1000000 )); }
+st() { systemctl show -p ActiveState --value "$1" 2>/dev/null; }
+units() { systemctl list-units --all --no-legend 'plasma-nm-vpn-*' | awk '{print $1 "=" $3 "/" $4}' | sed -E 's/plasma-nm-vpn-([a-z]+)-[^=]*/\1/' | tr '\n' ' '; }
+report() {
+  echo "  units:   $(units)"
+  echo "  tun:     $(ip link show $tun >/dev/null 2>&1 && echo present || echo gone)   core procs: $(pgrep -c -u plasma-nm-vpn)   chains: $(nft list chains inet plasma_nm_vpn 2>/dev/null | grep -c "${U:0:8}")   run dir: $([ -d $run ] && echo present || echo gone)"
+}
+guardlog() { journalctl -u "$guard" --since "@$1" --no-pager -o cat | grep -E "guard-cleanup|nothing|cleaned" | sed 's/^/  guard:   /'; }
+daemon() { # start the fake daemon as a child of a service's main process, as NM starts the real one; sets pid
+  n=$((n + 1))
+  systemd-run --quiet --collect --unit=pnv-fake-nm-$$-$n /bin/sh -c "$here/fake-daemon $U & wait"
+  for _ in $(seq 150); do journalctl -u pnv-fake-nm-$$-$n --no-pager -o cat | grep -q connected && break; sleep 0.1; done
+  local p
+  pid=
+  for p in $(cat "/sys/fs/cgroup$(systemctl show -p ControlGroup --value $scope)/cgroup.procs" 2>/dev/null); do
+    grep -q fake-daemon /proc/$p/cmdline 2>/dev/null && pid=$p
+  done
+}
+gone() { for _ in $(seq 200); do [[ $(st $guard) =~ ^(inactive|failed|)$ ]] && [[ $(st $core) =~ ^(inactive|failed|)$ ]] && return; sleep 0.05; done; }
+fetch() { ip route replace 203.0.113.0/24 dev $tun 2>/dev/null; curl -s -m 6 http://203.0.113.1/ || echo FAIL; }
+
+echo "== start from a service (as NM)"
+daemon
+echo "  daemon $pid cgroup: $(cut -d: -f3 /proc/$pid/cgroup)"
+echo "  guard ExecStart: [$(systemctl show -p ExecStart --value $guard)]"
+echo "  fetch: $(fetch)"
+report
+
+echo "== credentials"
+cred=/run/credentials/$core/config.json
+echo "  source: $(stat -c '%A %U' $run/config.json), dir $(stat -c '%A' $run); credential: $(stat -c '%A %U' $cred 2>&1)"
+echo "  pnv reads source: $(sudo -u pnv cat $run/config.json >/dev/null 2>&1 && echo YES || echo no); pnv reads credential: $(sudo -u pnv cat $cred >/dev/null 2>&1 && echo YES || echo no)"
+echo "  plasma-nm-vpn outside the unit reads credential: $(setpriv --reuid=plasma-nm-vpn --regid=plasma-nm-vpn --clear-groups cat $cred >/dev/null 2>&1 && echo YES || echo no)"
+rm $run/config.json
+echo "  source deleted: core $(st $core), fetch $(fetch)"
+kill -USR1 $pid; sleep 2
+echo "  SIGUSR1 without source: core $(st $core) ($(journalctl -u $core -n 3 --no-pager -o cat | grep -m1 -iE 'credential|fail' | cut -c1-100))"
+install -m 0600 /etc/pnv-proto/0.4/sing-box.json $run/config.json
+
+echo "== SIGUSR1: recreate the core only"
+kill -USR1 $pid; sleep 2
+echo "  core $(st $core), guard $(st $guard), fetch: $(fetch)"
+report
+
+echo "== SIGTERM"
+t=$(date +%s); t0=$(date +%s%N); kill -TERM $pid; gone
+echo "  done in $(ms $t0) ms"; report; sleep 0.3; guardlog $t
+
+for i in 1 2 3; do
+  echo "== kill -9 of the daemon, run $i"
+  daemon; t=$(date +%s); t0=$(date +%s%N)
+  kill -9 $pid; gone
+  echo "  guard inactive after $(ms $t0) ms"; report; guardlog $t
+  echo "  order: $(journalctl --since "@$t" --no-pager -o short-precise -u $core -u $guard | grep -E 'Stopped|Deactivated|guard-cleanup' | awk '{print $3, $5, $6, $7}' | sed -E 's/plasma-nm-vpn-(core|guard)-[^ ]*/\1/g' | tr '\n' ';')"
+done
+
+echo "== stop the service that started the daemon"
+daemon; systemctl stop pnv-fake-nm-$$-$n.service 2>/dev/null
+echo "  daemon alive: $(kill -0 $pid 2>/dev/null && echo yes || echo NO), core $(st $core)"
+
+echo "== kill -9 of the core"
+cpid=$(systemctl show -p MainPID --value $core); [ "$cpid" -gt 0 ] && kill -9 $cpid; sleep 1
+echo "  scope $(st $scope), guard $(st $guard), core $(st $core)"; report
+kill -TERM $pid; gone
+
+echo "== restart with the same UUID right after a crash"
+daemon; t=$(date +%s)
+kill -9 $pid; t0=$(date +%s%N); daemon
+echo "  new daemon up after $(ms $t0) ms; $(journalctl -u pnv-fake-nm-$$-$n --no-pager -o cat | grep -m1 'orphan wait')"; report
+echo "== the same, with guard-cleanup failing once"
+touch /run/pnv-guard-fail-once; t=$(date +%s)
+kill -9 $pid; t0=$(date +%s%N); daemon
+echo "  new daemon up after $(ms $t0) ms; $(journalctl -u pnv-fake-nm-$$-$n --no-pager -o cat | grep -m1 'orphan wait')"; report
+
+echo "== second daemon while the first is alive"
+n=$((n + 1)); t0=$(date +%s%N)
+timeout 30 systemd-run --quiet --wait --unit=pnv-fake-nm-$$-$n "$here/fake-daemon" $U >/dev/null 2>&1
+echo "  gave up after $(ms $t0) ms: $(journalctl -u pnv-fake-nm-$$-$n --no-pager -o cat | grep -m1 'still')"
+echo "  StartTransientUnit for the live scope: $(busctl call -- org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager StartTransientUnit 'ssa(sv)a(sa(sv))' $scope fail 1 PIDs au 1 $$ 0 2>&1)"
+kill -TERM $pid; gone; report

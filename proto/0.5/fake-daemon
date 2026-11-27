@@ -1,0 +1,124 @@
+#!/bin/bash
+# fake-daemon <uuid>: stands in for the daemon's Connect. Calls systemd over D-Bus as the C code will.
+# SIGTERM: synchronous disconnect. SIGUSR1: recreate the core unit only (a reconnect). Run as root.
+# Needs the bench (proto/stand) and the 0.4 configs (proto/0.4/make-configs).
+set -euo pipefail
+
+uuid=$1
+here=$(dirname "$(readlink -f "$0")")
+bin=${PNV_BIN:-/opt/pnv-proto/bin}
+tun=pnv-${uuid:0:8}
+run=/run/plasma-nm-vpn/$uuid
+scope=plasma-nm-vpn-daemon-$uuid.scope
+guard=plasma-nm-vpn-guard-$uuid.service
+core=plasma-nm-vpn-core-$uuid.service
+chain=${uuid:0:8}
+cap_net_admin=$((1 << 12))
+
+log() { echo "fake-daemon[$$] $(date +%T.%3N) $*"; }
+
+manager() { # manager METHOD SIGNATURE ARGS...
+  busctl call -- org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager "$@"
+}
+
+state() { systemctl show -p ActiveState --value "$1" 2>/dev/null || echo gone; }
+
+wait_state() { # wait_state UNIT TIMEOUT_S PATTERN
+  local i
+  for ((i = 0; i < $2 * 10; i++)); do
+    [[ $(state "$1") =~ ^($3)$ ]] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+start_core() {
+  manager StartTransientUnit 'ssa(sv)a(sa(sv))' "$core" fail 14 \
+    Description s "plasma-nm-vpn core $uuid" \
+    ExecStart 'a(sasb)' 1 "$bin/sing-box" 4 "$bin/sing-box" run -c '${CREDENTIALS_DIRECTORY}/config.json' false \
+    LoadCredential 'a(ss)' 1 config.json "$run/config.json" \
+    User s plasma-nm-vpn \
+    AmbientCapabilities t $cap_net_admin \
+    CapabilityBoundingSet t $cap_net_admin \
+    ProtectSystem s strict \
+    ProtectHome s yes \
+    PrivateTmp b true \
+    NoNewPrivileges b true \
+    KillSignal i 9 \
+    BindsTo as 1 "$scope" \
+    After as 2 "$scope" "$guard" \
+    CollectMode s inactive-or-failed \
+    0 >/dev/null
+  wait_state "$core" 5 active || { log "core did not start"; exit 1; }
+}
+
+stop_core() {
+  manager StopUnit ss "$core" replace >/dev/null 2>&1 || true
+  wait_state "$core" 10 'inactive|failed|gone'
+}
+
+disconnect() {
+  log "SIGTERM: disconnect"
+  stop_core
+  ip tuntap del dev "$tun" mode tun 2>/dev/null || true
+  nft delete chain inet plasma_nm_vpn "out-$chain" 2>/dev/null || true
+  nft delete chain inet plasma_nm_vpn "fwd-$chain" 2>/dev/null || true
+  rm -rf "$run"
+  manager StopUnit ss "$guard" replace >/dev/null
+  log "disconnected"
+  exit 0
+}
+
+reconnect() {
+  log "SIGUSR1: recreate the core unit"
+  stop_core
+  start_core
+  log "core recreated"
+}
+
+# 1. Orphan cleanup: wait until the previous instance's units are inactive, failed or gone.
+t0=$(date +%s%N)
+for u in "$scope" "$guard" "$core"; do
+  wait_state "$u" 10 'inactive|failed|gone' || { log "$u still $(state "$u") after 10 s"; exit 1; }
+done
+log "orphan wait $(( ($(date +%s%N) - t0) / 1000000 )) ms"
+
+# 2. Run directory, scope, guard unit.
+install -d -m 0700 "$run"
+manager StartTransientUnit 'ssa(sv)a(sa(sv))' "$scope" fail 3 \
+  Description s "plasma-nm-vpn daemon $uuid" \
+  PIDs au 1 $$ \
+  CollectMode s inactive-or-failed \
+  0 >/dev/null
+manager StartTransientUnit 'ssa(sv)a(sa(sv))' "$guard" fail 7 \
+  Description s "plasma-nm-vpn guard $uuid" \
+  Type s oneshot \
+  RemainAfterExit b true \
+  ExecStop 'a(sasb)' 1 "$here/guard-cleanup" 3 "$here/guard-cleanup" --daemon-gone "$uuid" false \
+  BindsTo as 1 "$scope" \
+  After as 1 "$scope" \
+  CollectMode s inactive-or-failed \
+  0 >/dev/null
+wait_state "$guard" 5 active || { log "guard unit did not start"; exit 1; }
+
+# 3. The per-UUID chains.
+nft -f - <<EOF
+table inet plasma_nm_vpn {}
+add chain inet plasma_nm_vpn out-$chain { type filter hook output priority 0; policy accept; }
+add chain inet plasma_nm_vpn fwd-$chain { type filter hook forward priority 0; policy accept; }
+add rule inet plasma_nm_vpn out-$chain ip daddr 203.0.113.0/24 counter
+EOF
+
+# 4. Persistent TUN, config, core unit.
+ip link show "$tun" >/dev/null 2>&1 || ip tuntap add dev "$tun" mode tun user plasma-nm-vpn
+install -m 0600 /etc/pnv-proto/0.4/sing-box.json "$run/config.json"
+start_core
+log "connected: scope, guard, chains, $tun, core"
+
+# 5. Run until a signal.
+trap disconnect TERM
+trap reconnect USR1
+while :; do
+  sleep 1 &
+  wait $! || true
+done
