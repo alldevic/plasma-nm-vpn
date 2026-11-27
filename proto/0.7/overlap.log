@@ -1,0 +1,10 @@
+#1  old 23666 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[64=activating ] marker=absent new daemon [23705 ] activated
+#2  old 23705 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[66=activating ] marker=absent new daemon [23767 ] activated
+#3  old 23767 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[68=activating ] marker=absent new daemon [23828 ] activated
+#4  old 23828 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[70=activating ] marker=absent new daemon [23889 ] activated
+#5  old 23889 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[72=activating ] marker=absent new daemon [23950 ] activated
+#6  old 23950 reason user-disconnected  last state-changed: cache=[74=activating ] fresh=[74=activating ] marker=absent disconnect: cache=[74=activating ] fresh=[74=activating ] marker=PRESENT new daemon [24013 ] activated
+#7  old 24013 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[76=activating ] marker=absent new daemon [24078 ] activated
+#8  old 24078 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[78=activating ] marker=absent new daemon [24139 ] activated
+#9  old 24139 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[] marker=absent               new daemon [24200 ] activated
+#10 old 24200 reason user-disconnected  last state-changed: cache=[] fresh=[] marker=absent               disconnect: cache=[] fresh=[82=activating ] marker=absent new daemon [24261 ] activated

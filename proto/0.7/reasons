@@ -1,0 +1,20 @@
+#!/bin/bash
+# Does the explicit reason reach the daemon before its Disconnect handler? 10 x down, 5 x delete. Run as root.
+log=/run/pnv-proto.log; P=proto-hy2
+here=$(dirname "$(readlink -f "$0")")
+daemon() { pgrep -f '^/usr/local/libexec/pnv-proto-service' | head -1; }
+check() { # check PID: the first reason and whether it came before "Disconnect: start"
+  local first; first=$(grep "^pnv-proto\[$1\]" $log | grep -nE 'reason (user-disconnected|connection-removed)|Disconnect: start' | head -1)
+  echo "$first" | grep -q reason && echo "reason first: $(echo "$first" | sed 's/.*reason //')" || echo "DISCONNECT FIRST"
+}
+for i in $(seq 1 10); do
+  nmcli --wait 30 connection up $P >/dev/null; sleep 0.5; : > $log; p=$(daemon)
+  nmcli connection down $P >/dev/null; sleep 1
+  echo "down   #$i: $(check $p)"
+done
+for i in $(seq 1 5); do
+  nmcli --wait 30 connection up $P >/dev/null; sleep 0.5; : > $log; p=$(daemon)
+  nmcli connection delete $P >/dev/null; sleep 1
+  echo "delete #$i: $(check $p)"
+  "$here/install" >/dev/null 2>&1
+done

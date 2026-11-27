@@ -1,0 +1,23 @@
+#!/bin/bash
+# Other ways to re-activate the active profile proto-hy2: up after a change, D-Bus ActivateConnection, down then up at once. Run as root.
+log=/run/pnv-proto.log; P=proto-hy2
+daemons() { pgrep -f '^/usr/local/libexec/pnv-proto-service' | tr '\n' ' '; }
+acs() { nmcli -g UUID,STATE,DBUS-PATH connection show --active | grep "$(nmcli -g connection.uuid connection show $P)" | awk -F: '{print $2, $3}' | sed 's|/org/freedesktop/NetworkManager/ActiveConnection/|ac|' | tr '\n' ' '; }
+nmcli connection down $P >/dev/null 2>&1; sleep 1; nmcli --wait 30 connection up $P >/dev/null; sleep 0.5
+echo "== up after modifying the active profile (x3)"
+for i in 1 2 3; do
+  : > $log; old=$(daemons); before=$(acs)
+  nmcli connection modify $P vpn.data "$(nmcli -g vpn.data connection show $P | sed "s/, *x=[0-9]*//"), x=$i"
+  nmcli --wait 30 connection up $P >/dev/null 2>&1; sleep 1.5
+  echo " #$i before [$before] after [$(acs)] daemons old [$old] now [$(daemons)]"; sed 's/^/   /' $log
+done
+echo "== D-Bus ActivateConnection on the active profile"
+: > $log; old=$(daemons); before=$(acs)
+CP=$(busctl call org.freedesktop.NetworkManager /org/freedesktop/NetworkManager/Settings org.freedesktop.NetworkManager.Settings GetConnectionByUuid s "$(nmcli -g connection.uuid connection show $P)" | awk '{print $2}' | tr -d '"')
+busctl call org.freedesktop.NetworkManager /org/freedesktop/NetworkManager org.freedesktop.NetworkManager ActivateConnection ooo "$CP" / / ; sleep 1.5
+echo " before [$before] after [$(acs)] daemons old [$old] now [$(daemons)]"; sed 's/^/   /' $log
+echo "== down, then up at once"
+: > $log; old=$(daemons)
+nmcli connection down $P >/dev/null 2>&1 & nmcli --wait 30 connection up $P >/dev/null 2>&1; wait; sleep 1.5
+echo " daemons old [$old] now [$(daemons)] state $(nmcli -g GENERAL.STATE connection show $P)"; sed 's/^/   /' $log
+nmcli connection down $P >/dev/null 2>&1

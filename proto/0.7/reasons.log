@@ -1,0 +1,15 @@
+down   #1: reason first: user-disconnected
+down   #2: reason first: user-disconnected
+down   #3: reason first: user-disconnected
+down   #4: reason first: user-disconnected
+down   #5: reason first: user-disconnected
+down   #6: reason first: user-disconnected
+down   #7: reason first: user-disconnected
+down   #8: reason first: user-disconnected
+down   #9: reason first: user-disconnected
+down   #10: reason first: user-disconnected
+delete #1: reason first: connection-removed
+delete #2: reason first: connection-removed
+delete #3: reason first: connection-removed
+delete #4: reason first: connection-removed
+delete #5: reason first: connection-removed
