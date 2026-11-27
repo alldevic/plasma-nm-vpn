@@ -120,6 +120,7 @@ typedef struct {
     char *private_key;
     char *preshared_key;
     char *header_protection_key;
+    guint skipped_ipv6; /* IPv6 entries dropped from address and allowed-ips (phase 2) */
 } PnvAmneziawg;
 
 typedef struct {
@@ -168,6 +169,9 @@ gboolean pnv_parse_bool(const char *key, const char *value, gboolean *out, PnvPr
 gboolean pnv_parse_base64(const char *key, const char *value, gsize length, GBytes **out, PnvProblem *problem);
 gboolean pnv_parse_hex(const char *key, const char *value, gsize length, GBytes **out, PnvProblem *problem);
 gboolean pnv_parse_ip4_list(const char *key, const char *value, guint max, GPtrArray **out, PnvProblem *problem);
+/* Like pnv_parse_cidr4_list, but valid IPv6 entries are skipped and counted instead of rejected. */
+gboolean pnv_parse_cidr_list_v4(const char *key, const char *value, guint max, GArray **out, guint *skipped6,
+                                PnvProblem *problem);
 /* Normalizes 0.0.0.0/1 + 128.0.0.0/1 to 0.0.0.0/0 and drops duplicates. */
 gboolean pnv_parse_cidr4_list(const char *key, const char *value, guint max, GArray **out, PnvProblem *problem);
 gboolean pnv_parse_alpn(const char *key, const char *value, GPtrArray **out, PnvProblem *problem);

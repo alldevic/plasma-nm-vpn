@@ -16,7 +16,6 @@
 #define STOP_WAIT_MS 10000
 #define DEFAULT_MTU 1400
 
-static const char *const default_dns[] = {"1.1.1.1", "9.9.9.9", NULL};
 
 static GVariant *strv(const char *a, const char *b)
 {
@@ -71,11 +70,20 @@ static void remove_guard(PnvSession *s)
     pnv_guard_remove(s->uuid);
 }
 
-/* NM routes the default via the VPN unless the profile says never-default. */
-static gboolean default_route(PnvSession *s)
+static PnvIp4Plan *ip4_plan(PnvSession *s)
 {
     NMSettingIPConfig *s_ip4 = nm_connection_get_setting_ip4_config(s->connection);
-    return !(s_ip4 && nm_setting_ip_config_get_never_default(s_ip4));
+
+    return pnv_ip4_plan(s->protocol->routes ? s->protocol->routes(s) : NULL,
+                        s_ip4 && nm_setting_ip_config_get_never_default(s_ip4), s->profile->dns);
+}
+
+/* A default-route tunnel: the guard (2.6) and the kill switch depend on it. NM routes the default via the VPN
+ * unless the profile says never-default; an AmneziaWG tunnel also needs 0.0.0.0/0 in allowed-ips. */
+static gboolean default_route(PnvSession *s)
+{
+    g_autoptr(PnvIp4Plan) plan = ip4_plan(s);
+    return plan->default_route;
 }
 
 static void stop_core(PnvSession *s)
@@ -446,8 +454,7 @@ static GVariant *ip4(const char *text)
  * itself; the route to the gateway goes via the parent device. */
 void pnv_session_send_config(PnvSession *s)
 {
-    gboolean never_default = !default_route(s);
-    const GPtrArray *dns = s->profile->dns;
+    g_autoptr(PnvIp4Plan) plan = ip4_plan(s);
     GVariantBuilder b, servers, routes;
     struct in6_addr a6;
 
@@ -465,32 +472,22 @@ void pnv_session_send_config(PnvSession *s)
         g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_MTU, g_variant_new_uint32(s->profile->mtu));
     nm_vpn_service_plugin_set_config(s->plugin, g_variant_builder_end(&b));
 
-    /* DNS (design.md, "DNS"): the profile's servers; the public defaults only for a default-route tunnel; with
-     * never-default, explicit servers get /32 routes via the TUN so that queries to them stay in the tunnel. */
     g_variant_builder_init(&servers, G_VARIANT_TYPE("au"));
+    for (guint i = 0; i < plan->dns->len; i++)
+        g_variant_builder_add_value(&servers, ip4(plan->dns->pdata[i]));
     g_variant_builder_init(&routes, G_VARIANT_TYPE("aau"));
-    if (dns && dns->len) {
-        for (guint i = 0; i < dns->len; i++) {
-            g_variant_builder_add_value(&servers, ip4(dns->pdata[i]));
-            if (never_default) {
-                GVariantBuilder r;
-                g_variant_builder_init(&r, G_VARIANT_TYPE("au"));
-                g_variant_builder_add_value(&r, ip4(dns->pdata[i]));
-                g_variant_builder_add(&r, "u", 32);
-                g_variant_builder_add(&r, "u", 0);
-                g_variant_builder_add(&r, "u", 0);
-                g_variant_builder_add_value(&routes, g_variant_builder_end(&r));
-            }
-        }
-    } else if (!never_default) {
-        for (const char *const *d = default_dns; *d; d++)
-            g_variant_builder_add_value(&servers, ip4(*d));
+    for (guint i = 0; i < plan->routes->len; i++) {
+        PnvCidr4 c = g_array_index(plan->routes, PnvCidr4, i);
+        guint32 route[] = {htonl(c.address), c.prefix, 0, 0};
+        g_variant_builder_add_value(&routes, g_variant_new_fixed_array(G_VARIANT_TYPE_UINT32, route, 4, sizeof *route));
     }
     g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ADDRESS, g_variant_new_uint32(htonl(s->tun_address)));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_PREFIX, g_variant_new_uint32(s->tun_prefix));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_DNS, g_variant_builder_end(&servers));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ROUTES, g_variant_builder_end(&routes));
+    if (plan->never_default)
+        g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_NEVER_DEFAULT, g_variant_new_boolean(TRUE));
     nm_vpn_service_plugin_set_ip4_config(s->plugin, g_variant_builder_end(&b));
     pnv_message(s, "Config and Ip4Config sent");
 }

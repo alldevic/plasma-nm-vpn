@@ -19,6 +19,8 @@ typedef struct {
     guint default_mtu;             /* without mtu in the profile; 0: 1400 */
     /* The profile brings its own TUN address (AmneziaWG); without this, a /30 from the pool. */
     gboolean (*tun_address)(PnvSession *session, guint32 *address, guint *prefix);
+    /* The tunnel's own routes (AmneziaWG allowed-ips); without this the tunnel carries everything. */
+    const GArray *(*routes)(PnvSession *session);
     /* Called once the run directory, the guard unit and the TUN exist: generates the config and calls
      * pnv_session_start_core(). An error fails the connection. */
     gboolean (*connect)(PnvSession *session, GError **error);
@@ -47,6 +49,19 @@ char *pnv_resolve_server(GResolver *resolver, const char *name, guint timeout_ms
 char *pnv_cache_read(const char *dir, const char *uuid, const char *server);
 gboolean pnv_cache_write(const char *dir, const char *uuid, const char *server, const char *ip, GError **error);
 gboolean pnv_pool_reserve(const char *uuid, const char *run_dir, guint32 *network, GError **error);
+
+/* Ip4Config (ip4plan.c): routes (PnvCidr4) never include 0.0.0.0/0; never_default asks NM not to route the
+ * default through the tunnel; dns are IPv4 literals. */
+typedef struct {
+    gboolean default_route;
+    gboolean never_default;
+    GArray *routes;
+    GPtrArray *dns;
+} PnvIp4Plan;
+
+PnvIp4Plan *pnv_ip4_plan(const GArray *routes, gboolean never_default_setting, const GPtrArray *dns);
+void pnv_ip4_plan_free(PnvIp4Plan *plan);
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(PnvIp4Plan, pnv_ip4_plan_free)
 
 /* systemd (units.c). Unit names: plasma-nm-vpn-{daemon,guard,core}-<uuid>.{scope,service}. */
 GDBusConnection *pnv_bus(void);

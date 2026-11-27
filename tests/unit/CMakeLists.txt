@@ -23,3 +23,7 @@ add_executable(test-awg-config test_awg_config.c)
 target_link_libraries(test-awg-config PRIVATE pnv-awg-config)
 add_test(NAME awg-config COMMAND test-awg-config ${PROJECT_SOURCE_DIR}/backends/awg/data/amneziawg-params.list
          ${PROJECT_SOURCE_DIR}/tests/golden/amneziawg-tools-v3.1.20260812)
+
+add_executable(test-ip4plan test_ip4plan.c)
+target_link_libraries(test-ip4plan PRIVATE pnv-daemon)
+add_test(NAME ip4plan COMMAND test-ip4plan)

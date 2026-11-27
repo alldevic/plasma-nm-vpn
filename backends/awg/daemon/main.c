@@ -29,7 +29,17 @@ static gboolean awg_tun_address(PnvSession *session, guint32 *address, guint *pr
     first = g_array_index(list, PnvCidr4, 0);
     *address = first.address;
     *prefix = first.prefix;
+    if (list->len > 1)
+        pnv_warning(session, "address: using the first IPv4 address, skipping %u more", list->len - 1);
+    if (pnv_session_profile(session)->amneziawg.skipped_ipv6)
+        pnv_warning(session, "skipping %u IPv6 entries in address and allowed-ips (IPv6 in the tunnel is phase 2)",
+                    pnv_session_profile(session)->amneziawg.skipped_ipv6);
     return TRUE;
+}
+
+static const GArray *awg_routes(PnvSession *session)
+{
+    return pnv_session_profile(session)->amneziawg.allowed_ips;
 }
 
 static void remove_socket(PnvSession *session)
@@ -164,6 +174,7 @@ static const PnvProtocol amneziawg = {
     .allowlist = DATA_DIR "/amneziawg-params.list",
     .default_mtu = 1420,
     .tun_address = awg_tun_address,
+    .routes = awg_routes,
     .connect = awg_connect,
 };
 

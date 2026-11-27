@@ -25,6 +25,7 @@ def awg(name, **override):
             "allowed-ips": kv["AllowedIPs"], "keepalive": kv["PersistentKeepalive"], "dns": "203.0.113.1"}
     data.update({f"awg-{k.lower()}": kv[k] for k in PARAMS if k in kv})
     data.update({k.replace("_", "-"): v for k, v in override.items()})
+    data = {k: v for k, v in data.items() if v != ""}
     secrets = {"private-key": kv["PrivateKey"], "awg-headerprotectionkey": kv["HeaderProtectionKey"]}
     return keyfile(name, data, secrets, service=SERVICE)
 

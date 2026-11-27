@@ -73,6 +73,8 @@ static void test_rejected(void)
         {"allowed-ips", "10.0.0.0/33", FALSE, PNV_E_BAD_CIDR, "allowed-ips"},
         {"private-key", "", TRUE, PNV_E_MISSING, "private-key"},
         {"ports", "443", FALSE, PNV_E_UNKNOWN_KEY, "ports"},
+        {"allowed-ips", "::/0", FALSE, PNV_E_MISSING, "allowed-ips"},
+        {"address", "fd00::2/64", FALSE, PNV_E_MISSING, "address"},
     };
 
     for (gsize i = 0; i < G_N_ELEMENTS(cases); i++) {
@@ -85,6 +87,16 @@ static void test_rejected(void)
             g_error("case %zu: got %s %s, want %s %s", i, pnv_code_name(p.code), p.key,
                     pnv_code_name(cases[i].code), cases[i].problem_key);
     }
+}
+
+static void test_ipv6_skipped(void)
+{
+    g_auto(PnvProblem) p = {0};
+    g_autoptr(PnvProfile) profile = parse("allowed-ips", "0.0.0.0/0, ::/0", FALSE, &p);
+
+    g_assert_nonnull(profile);
+    g_assert_cmpuint(profile->amneziawg.skipped_ipv6, ==, 1);
+    g_assert_cmpuint(profile->amneziawg.allowed_ips->len, ==, 1);
 }
 
 static void test_without_allowlist(void)
@@ -113,6 +125,7 @@ int main(int argc, char **argv)
     list_path = argv[1];
     g_test_add_func("/awg/accepted", test_accepted);
     g_test_add_func("/awg/rejected", test_rejected);
+    g_test_add_func("/awg/ipv6-skipped", test_ipv6_skipped);
     g_test_add_func("/awg/without-allowlist", test_without_allowlist);
     g_test_add_func("/awg/secrets", test_secrets);
     return g_test_run();

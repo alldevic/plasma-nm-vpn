@@ -268,7 +268,23 @@ static gint cidr_index(GArray *list, PnvCidr4 c)
     return -1;
 }
 
+static gboolean parse_cidrs(const char *key, const char *value, guint max, GArray **out, guint *skipped6,
+                            PnvProblem *p);
+
 gboolean pnv_parse_cidr4_list(const char *key, const char *value, guint max, GArray **out, PnvProblem *p)
+{
+    return parse_cidrs(key, value, max, out, NULL, p);
+}
+
+gboolean pnv_parse_cidr_list_v4(const char *key, const char *value, guint max, GArray **out, guint *skipped6,
+                                PnvProblem *p)
+{
+    *skipped6 = 0;
+    return parse_cidrs(key, value, max, out, skipped6, p);
+}
+
+static gboolean parse_cidrs(const char *key, const char *value, guint max, GArray **out, guint *skipped6,
+                            PnvProblem *p)
 {
     static const PnvCidr4 all = {0, 0}, low = {0, 1}, high = {0x80000000u, 1};
     g_auto(GStrv) items = split_list(value);
@@ -285,6 +301,15 @@ gboolean pnv_parse_cidr4_list(const char *key, const char *value, guint max, GAr
         struct in_addr a;
         guint64 prefix = 32;
 
+        if (skipped6 && parts[0] && strchr(parts[0], ':')) {
+            struct in6_addr a6;
+            guint64 prefix6 = 128;
+            if (inet_pton(AF_INET6, parts[0], &a6) != 1 || (parts[1] && parts[2]) ||
+                (parts[1] && (!parse_decimal(parts[1], strlen(parts[1]), &prefix6) || prefix6 > 128)))
+                return fail(p, PNV_E_BAD_CIDR, key, i, 0, 0);
+            (*skipped6)++;
+            continue;
+        }
         if (!parts[0] || inet_pton(AF_INET, parts[0], &a) != 1 || (parts[1] && parts[2]) ||
             (parts[1] && (!parse_decimal(parts[1], strlen(parts[1]), &prefix) || prefix > 32)))
             return fail(p, PNV_E_BAD_CIDR, key, i, 0, 0);

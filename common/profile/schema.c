@@ -269,9 +269,16 @@ static gboolean apply(const Field *f, const char *key, const char *value, const 
         g_free(*(char **)at);
         *(char **)at = g_strdup(value);
         return TRUE;
-    case T_CIDR4_LIST:
+    case T_CIDR4_LIST: {
+        guint skipped;
         g_clear_pointer((GArray **)at, g_array_unref);
-        return pnv_parse_cidr4_list(key, value, f->max, at, p);
+        if (!pnv_parse_cidr_list_v4(key, value, f->max, at, &skipped, p))
+            return FALSE;
+        profile->amneziawg.skipped_ipv6 += skipped;
+        if (!(*(GArray **)at)->len)
+            return fail(p, PNV_E_MISSING, key, NULL, 0, 0);
+        return TRUE;
+    }
     case T_AWG_PARAM: {
         const char *const *fields = pnv_list_fields(allowlist, key);
         PnvAwgParam *param;
