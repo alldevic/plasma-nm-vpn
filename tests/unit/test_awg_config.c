@@ -13,7 +13,9 @@ static char *generate(const char *path)
     g_auto(GStrv) lines = NULL;
     g_autoptr(GHashTable) data = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     g_autoptr(GHashTable) secrets = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-    g_autoptr(PnvList) allowed = pnv_list_load(list_path, NULL);
+    g_autoptr(PnvList) allowed = pnv_list_new();
+
+    g_assert_true(pnv_list_merge_file(allowed, list_path, "awg/", NULL));
     g_auto(PnvProblem) problem = {0};
     g_autoptr(PnvProfile) profile = NULL;
 

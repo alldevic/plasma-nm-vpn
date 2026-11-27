@@ -12,10 +12,16 @@ typedef struct PnvSession PnvSession;
 
 typedef void (*PnvCleanup)(PnvSession *session);
 
+/* A list file and the prefix its entries get in the merged list (pnv_list_merge). */
+typedef struct {
+    const char *prefix;
+    const char *path;
+} PnvListFile;
+
 typedef struct {
     const char *service;           /* vpn.service-type, e.g. org.freedesktop.NetworkManager.pnv.hysteria2 */
     const char *name;              /* for the journal */
-    const char *allowlist;         /* the list file for extra or awg-* parameters; NULL: those are refused */
+    const PnvListFile *lists;      /* the core version's list files, {NULL}-terminated; NULL: none */
     guint default_mtu;             /* without mtu in the profile; 0: 1400 */
     /* The profile brings its own TUN address (AmneziaWG); without this, a /30 from the pool. */
     gboolean (*tun_address)(PnvSession *session, guint32 *address, guint *prefix);

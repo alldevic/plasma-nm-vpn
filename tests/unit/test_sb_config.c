@@ -15,7 +15,9 @@ static PnvProfile *load_profile(const char *path, char **ip, PnvProblem *problem
     g_auto(GStrv) lines = NULL;
     g_autoptr(GHashTable) data = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     g_autoptr(GHashTable) secrets = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-    g_autoptr(PnvList) allowed = pnv_list_load(allowlist_path, NULL);
+    g_autoptr(PnvList) allowed = pnv_list_new();
+
+    g_assert_true(pnv_list_merge_file(allowed, allowlist_path, "extra/", NULL));
 
     g_assert_true(g_file_get_contents(path, &text, NULL, NULL));
     lines = g_strsplit(text, "\n", -1);
@@ -80,7 +82,9 @@ static void test_golden(void)
 static void test_rejected(void)
 {
     g_autoptr(JsonNode) template = pnv_sb_load_template(template_path, NULL);
-    g_autoptr(PnvList) allowed = pnv_list_load(allowlist_path, NULL);
+    g_autoptr(PnvList) allowed = pnv_list_new();
+
+    g_assert_true(pnv_list_merge_file(allowed, allowlist_path, "extra/", NULL));
     g_autoptr(GHashTable) data = g_hash_table_new(g_str_hash, g_str_equal);
     g_autoptr(GHashTable) secrets = g_hash_table_new(g_str_hash, g_str_equal);
     PnvSbTarget target = {"pnv-5ca1ab1e", "198.18.0.1/30", 1400, "198.51.100.1", NULL};

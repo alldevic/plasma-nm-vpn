@@ -171,7 +171,7 @@ static gboolean awg_connect(PnvSession *session, GError **error)
 static const PnvProtocol amneziawg = {
     .service = PNV_SERVICE_AMNEZIAWG,
     .name = "amneziawg",
-    .allowlist = DATA_DIR "/amneziawg-params.list",
+    .lists = (const PnvListFile[]){{"awg/", DATA_DIR "/amneziawg-params.list"}, {NULL}},
     .default_mtu = 1420,
     .tun_address = awg_tun_address,
     .routes = awg_routes,

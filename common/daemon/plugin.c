@@ -151,13 +151,14 @@ static PnvProfile *parse_profile(PnvSession *s, GError **error)
 #ifdef PNV_TEST_HOOKS
     g_hash_table_remove(data, "pnv-test-hook");
 #endif
-    if (s->protocol->allowlist) {
-        allowed = pnv_list_load(s->protocol->allowlist, &problem);
-        if (!allowed) {
-            reason = pnv_problem_describe(&problem);
-            pnv_warning(s, "%s: allowlisted keys are refused", reason);
-            g_clear_pointer(&reason, g_free);
-        }
+    allowed = pnv_list_new();
+    for (const PnvListFile *f = s->protocol->lists; f && f->path; f++) {
+        if (pnv_list_merge_file(allowed, f->path, f->prefix, &problem))
+            continue;
+        reason = pnv_problem_describe(&problem);
+        pnv_warning(s, "%s: the keys and values it lists are refused", reason);
+        g_clear_pointer(&reason, g_free);
+        pnv_problem_clear(&problem);
     }
     profile = pnv_profile_parse(s->protocol->service, data, secrets, allowed, &problem);
     if (!profile) {

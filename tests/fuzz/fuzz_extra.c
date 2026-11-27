@@ -11,7 +11,7 @@ int LLVMFuzzerTestOneInput(const guint8 *bytes, size_t size)
     g_auto(PnvProblem) problem = {0};
     g_autoptr(JsonObject) extra = NULL;
 
-    if (pnv_parse_extra("extra", text, allowed, &extra, &problem))
+    if (pnv_parse_extra("extra", text, allowed, NULL, &extra, &problem))
         g_assert(extra);
     return 0;
 }

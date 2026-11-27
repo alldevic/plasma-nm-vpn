@@ -92,6 +92,36 @@ const char *const *pnv_list_fields(const PnvList *list, const char *entry)
     return list ? g_hash_table_lookup(list->set, entry) : NULL;
 }
 
+PnvList *pnv_list_new(void)
+{
+    return pnv_list_parse("", "", NULL);
+}
+
+void pnv_list_merge(PnvList *into, const PnvList *from, const char *prefix)
+{
+    for (guint i = 0; i < from->entries->len; i++) {
+        const char *name = from->entries->pdata[i];
+        char *entry = g_strconcat(prefix, name, NULL);
+
+        if (g_hash_table_contains(into->set, entry)) {
+            g_free(entry);
+            continue;
+        }
+        g_ptr_array_add(into->entries, entry);
+        g_hash_table_insert(into->set, entry, g_strdupv((GStrv)pnv_list_fields(from, name)));
+    }
+}
+
+gboolean pnv_list_merge_file(PnvList *into, const char *path, const char *prefix, PnvProblem *p)
+{
+    g_autoptr(PnvList) one = pnv_list_load(path, p);
+
+    if (!one)
+        return FALSE;
+    pnv_list_merge(into, one, prefix);
+    return TRUE;
+}
+
 void pnv_list_free(PnvList *list)
 {
     if (!list)

@@ -13,6 +13,7 @@ G_BEGIN_DECLS
 
 #define PNV_SERVICE_HYSTERIA2 "org.freedesktop.NetworkManager.pnv.hysteria2"
 #define PNV_SERVICE_AMNEZIAWG "org.freedesktop.NetworkManager.pnv.amneziawg"
+#define PNV_SERVICE_VLESS "org.freedesktop.NetworkManager.pnv.vless"
 
 /* Stable message codes: the daemon renders them for the journal, the editors through ki18n. Append only. */
 typedef enum {
@@ -80,6 +81,11 @@ gboolean pnv_list_contains(const PnvList *list, const char *entry);
 /* The fields after the entry, NULL-terminated; NULL if the entry is not in the list. */
 const char *const *pnv_list_fields(const PnvList *list, const char *entry);
 void pnv_list_free(PnvList *list);
+/* A protocol's lists are merged into one, each file under its prefix ("extra/", "awg/", "tls-fingerprint/"); the
+ * schema fields look up their values under their own prefix. */
+PnvList *pnv_list_new(void);
+void pnv_list_merge(PnvList *into, const PnvList *from, const char *prefix);
+gboolean pnv_list_merge_file(PnvList *into, const char *path, const char *prefix, PnvProblem *problem);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(PnvList, pnv_list_free)
 
 typedef struct {
@@ -124,6 +130,21 @@ typedef struct {
 } PnvAmneziawg;
 
 typedef struct {
+    guint16 port;
+    char *encryption; /* "none" or a VLESS Encryption (ML-KEM) client string */
+    char *reality_pbk;
+    char *reality_sid; /* NULL: empty */
+    char *reality_spx;
+    char *tls_sni;
+    char *tls_fingerprint;
+    char *xhttp_mode;
+    char *xhttp_path;
+    char *xhttp_host; /* NULL: the server name */
+    JsonObject *xhttp_extra;
+    char *uuid;
+} PnvVless;
+
+typedef struct {
     const char *service;
     guint schema;
     char *server;
@@ -134,6 +155,7 @@ typedef struct {
     JsonObject *extra; /* NULL: not set */
     PnvHysteria2 hysteria2;
     PnvAmneziawg amneziawg;
+    PnvVless vless;
 } PnvProfile;
 
 /* The secrets of a service type, for need_secrets and the auth dialog. A secret with `when` is needed only if
@@ -148,8 +170,8 @@ typedef struct {
 
 const PnvSecret *pnv_service_secrets(const char *service); /* NULL-terminated; NULL for unknown types */
 
-/* vpn.data and vpn.secrets (string → string) → profile. The allowlist is the core version's: extra keys for
- * the proxy cores, awg-* parameters for AmneziaWG; NULL rejects all of those. */
+/* vpn.data and vpn.secrets (string → string) → profile. The lists are the core version's, merged under their
+ * prefixes (pnv_list_merge); NULL rejects everything that needs them. */
 PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable *secrets,
                               const PnvList *allowlist, PnvProblem *problem);
 void pnv_profile_free(PnvProfile *profile);
@@ -175,7 +197,8 @@ gboolean pnv_parse_cidr_list_v4(const char *key, const char *value, guint max, G
 /* Normalizes 0.0.0.0/1 + 128.0.0.0/1 to 0.0.0.0/0 and drops duplicates. */
 gboolean pnv_parse_cidr4_list(const char *key, const char *value, guint max, GArray **out, PnvProblem *problem);
 gboolean pnv_parse_alpn(const char *key, const char *value, GPtrArray **out, PnvProblem *problem);
-gboolean pnv_parse_extra(const char *key, const char *value, const PnvList *allowed, JsonObject **out,
+/* Member paths are looked up as prefix + path; an entry "a.*" allows any member name directly under a. */
+gboolean pnv_parse_extra(const char *key, const char *value, const PnvList *allowed, const char *prefix, JsonObject **out,
                          PnvProblem *problem);
 
 G_END_DECLS

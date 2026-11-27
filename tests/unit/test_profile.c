@@ -260,7 +260,11 @@ static void test_cidr(void)
 
 static PnvList *extra_list(void)
 {
-    return pnv_list_parse("# test\nup_mbps\ntls\ntls.fragment\nserver_ports\n", "test", NULL);
+    g_autoptr(PnvList) one = pnv_list_parse("# test\nup_mbps\ntls\ntls.fragment\nserver_ports\n", "test", NULL);
+    PnvList *all = pnv_list_new();
+
+    pnv_list_merge(all, one, "extra/");
+    return all;
 }
 
 static void test_extra(void)
@@ -299,7 +303,7 @@ static void test_extra(void)
     for (gsize i = 0; i < G_N_ELEMENTS(cases); i++) {
         g_auto(PnvProblem) p = {0};
         g_autoptr(JsonObject) out = NULL;
-        gboolean ok = pnv_parse_extra("extra", cases[i].json, allowed, &out, &p);
+        gboolean ok = pnv_parse_extra("extra", cases[i].json, allowed, "extra/", &out, &p);
         Case c = {cases[i].json, cases[i].code, ANY};
 
         expect("extra", cases[i].json, ok, &p, &c);
@@ -307,7 +311,7 @@ static void test_extra(void)
             g_assert_cmpstr(p.detail, ==, cases[i].detail);
         g_assert_true(ok == (out != NULL));
     }
-    g_assert_false(pnv_parse_extra("extra", "{}", NULL, NULL, &none));
+    g_assert_false(pnv_parse_extra("extra", "{}", NULL, "extra/", NULL, &none));
     g_assert_cmpint(none.code, ==, PNV_E_EXTRA_NOT_ALLOWED);
 }
 

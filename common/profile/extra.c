@@ -22,10 +22,32 @@ static gboolean forbidden(const char *name)
     return strcmp(name, "detour") == 0 || strcmp(name, "path") == 0 || g_str_has_suffix(name, "_path");
 }
 
-static gboolean check_node(const char *key, JsonNode *node, const char *path, const PnvList *allowed, PnvProblem *p);
+typedef struct {
+    const char *key;
+    const PnvList *allowed;
+    const char *prefix;
+} Check;
 
-static gboolean check_object(const char *key, JsonObject *object, const char *path, const PnvList *allowed,
-                             PnvProblem *p)
+static gboolean check_node(const Check *c, JsonNode *node, const char *path, PnvProblem *p);
+
+/* The path itself, or "<parent>.*", on the list under the prefix; *matched is the path to check below. */
+static gboolean allowed(const Check *c, const char *path, const char *parent, char **matched)
+{
+    g_autofree char *exact = g_strconcat(c->prefix, path, NULL);
+    g_autofree char *wild = g_strconcat(c->prefix, parent ? parent : "", parent ? "." : "", "*", NULL);
+
+    if (pnv_list_contains(c->allowed, exact)) {
+        *matched = g_strdup(path);
+        return TRUE;
+    }
+    if (parent && pnv_list_contains(c->allowed, wild)) {
+        *matched = g_strconcat(parent, ".*", NULL);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static gboolean check_object(const Check *c, JsonObject *object, const char *path, PnvProblem *p)
 {
     JsonObjectIter iter;
     const char *name;
@@ -34,12 +56,13 @@ static gboolean check_object(const char *key, JsonObject *object, const char *pa
     json_object_iter_init(&iter, object);
     while (json_object_iter_next(&iter, &name, &member)) {
         g_autofree char *member_path = path ? g_strconcat(path, ".", name, NULL) : g_strdup(name);
+        g_autofree char *matched = NULL;
 
         if (forbidden(name))
-            return extra_fail(p, PNV_E_EXTRA_FORBIDDEN, key, member_path, 0);
-        if (!pnv_list_contains(allowed, member_path))
-            return extra_fail(p, PNV_E_EXTRA_NOT_ALLOWED, key, member_path, 0);
-        if (!check_node(key, member, member_path, allowed, p))
+            return extra_fail(p, PNV_E_EXTRA_FORBIDDEN, c->key, member_path, 0);
+        if (!allowed(c, member_path, path, &matched))
+            return extra_fail(p, PNV_E_EXTRA_NOT_ALLOWED, c->key, member_path, 0);
+        if (!check_node(c, member, matched, p))
             return FALSE;
     }
     return TRUE;
@@ -47,17 +70,19 @@ static gboolean check_object(const char *key, JsonObject *object, const char *pa
 
 /* Members are checked recursively; arrays hold only scalars (or arrays of them); strings follow the common
  * rule after unescaping, so "\u000a" is a newline as well. */
-static gboolean check_node(const char *key, JsonNode *node, const char *path, const PnvList *allowed, PnvProblem *p)
+static gboolean check_node(const Check *c, JsonNode *node, const char *path, PnvProblem *p)
 {
+    const char *key = c->key;
+
     switch (JSON_NODE_TYPE(node)) {
     case JSON_NODE_OBJECT:
-        return check_object(key, json_node_get_object(node), path, allowed, p);
+        return check_object(c, json_node_get_object(node), path, p);
     case JSON_NODE_ARRAY: {
         g_autoptr(GList) elements = json_array_get_elements(json_node_get_array(node));
         for (GList *e = elements; e; e = e->next) {
             if (JSON_NODE_HOLDS_OBJECT(e->data))
                 return extra_fail(p, PNV_E_EXTRA_BAD_VALUE, key, path, 0);
-            if (!check_node(key, e->data, path, allowed, p))
+            if (!check_node(c, e->data, path, p))
                 return FALSE;
         }
         return TRUE;
@@ -96,9 +121,11 @@ static gint nesting(const char *text)
     return max;
 }
 
-gboolean pnv_parse_extra(const char *key, const char *value, const PnvList *allowed, JsonObject **out,
+gboolean pnv_parse_extra(const char *key, const char *value, const PnvList *allowed, const char *prefix, JsonObject **out,
                          PnvProblem *p)
 {
+    Check c = {key, allowed, prefix ? prefix : ""};
+
     g_autoptr(JsonParser) parser = NULL;
     JsonNode *root;
 
@@ -114,7 +141,7 @@ gboolean pnv_parse_extra(const char *key, const char *value, const PnvList *allo
         return extra_fail(p, PNV_E_JSON_NOT_OBJECT, key, NULL, 0);
     if (!allowed)
         return extra_fail(p, PNV_E_EXTRA_NOT_ALLOWED, key, NULL, 0);
-    if (!check_object(key, json_node_get_object(root), NULL, allowed, p))
+    if (!check_object(&c, json_node_get_object(root), NULL, p))
         return FALSE;
     if (out)
         *out = json_object_ref(json_node_get_object(root));

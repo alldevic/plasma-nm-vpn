@@ -14,7 +14,9 @@ static PnvProfile *parse(const char *extra_key, const char *extra_value, gboolea
 {
     g_autoptr(GHashTable) data = g_hash_table_new(g_str_hash, g_str_equal);
     g_autoptr(GHashTable) secrets = g_hash_table_new(g_str_hash, g_str_equal);
-    g_autoptr(PnvList) allowed = pnv_list_load(list_path, NULL);
+    g_autoptr(PnvList) allowed = pnv_list_new();
+
+    g_assert_true(pnv_list_merge_file(allowed, list_path, "awg/", NULL));
 
     g_assert_nonnull(allowed);
     g_hash_table_insert(data, "server", "198.51.100.1");

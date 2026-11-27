@@ -21,6 +21,12 @@ typedef enum {
     T_KEY32,
     T_CIDR4_LIST,
     T_AWG_PARAM,
+    T_ENUM_LIST,
+    T_B64URL32,
+    T_SHORT_ID,
+    T_URL_PATH,
+    T_VLESS_ENCRYPTION,
+    T_UUID,
 } FieldType;
 
 typedef struct {
@@ -29,6 +35,7 @@ typedef struct {
     gsize offset;
     gboolean required;
     guint min, max; /* T_UINT bounds; T_SECRET maximum length; T_CIDR4_LIST maximum entries */
+    const char *list; /* T_EXTRA, T_ENUM_LIST: the prefix of their entries in the protocol's lists */
 } Field;
 
 #define AT(member) offsetof(PnvProfile, member)
@@ -39,7 +46,7 @@ static const Field common_fields[] = {
     {"kill-switch", T_BOOL, AT(kill_switch)},
     {"allow-lan", T_BOOL, AT(allow_lan)},
     {"mtu", T_UINT, AT(mtu), FALSE, 1280, 9000},
-    {"extra", T_EXTRA, AT(extra)},
+    {"extra", T_EXTRA, AT(extra), .list = "extra/"},
     {NULL},
 };
 
@@ -91,7 +98,32 @@ static const PnvSecret amneziawg_secrets[] = {
     {NULL},
 };
 
-/* awg-<parameter> keys, checked against the allowlist entry "awg-<parameter> <config key> <type>". */
+static const Field vless_fields[] = {
+    {"port", T_PORT, AT(vless.port), TRUE},
+    {"encryption", T_VLESS_ENCRYPTION, AT(vless.encryption)},
+    {"reality-pbk", T_B64URL32, AT(vless.reality_pbk), TRUE},
+    {"reality-sid", T_SHORT_ID, AT(vless.reality_sid)},
+    {"reality-spx", T_URL_PATH, AT(vless.reality_spx)},
+    {"tls-sni", T_SNI, AT(vless.tls_sni), TRUE},
+    {"tls-fingerprint", T_ENUM_LIST, AT(vless.tls_fingerprint), .list = "tls-fingerprint/"},
+    {"xhttp-mode", T_ENUM_LIST, AT(vless.xhttp_mode), .list = "xhttp-mode/"},
+    {"xhttp-path", T_URL_PATH, AT(vless.xhttp_path)},
+    {"xhttp-host", T_SNI, AT(vless.xhttp_host)},
+    {"xhttp-extra", T_EXTRA, AT(vless.xhttp_extra), .list = "xhttp-extra/"},
+    {NULL},
+};
+
+static const Field vless_secret_fields[] = {
+    {"uuid", T_UUID, AT(vless.uuid)},
+    {NULL},
+};
+
+static const PnvSecret vless_secrets[] = {
+    {"uuid", "User ID (UUID)", NULL, FALSE},
+    {NULL},
+};
+
+/* awg-<parameter> keys, checked against the list entry "awg/awg-<parameter> <config key> <type>". */
 static const Field awg_param = {NULL, T_AWG_PARAM, AT(amneziawg.params)};
 
 typedef struct {
@@ -105,6 +137,7 @@ typedef struct {
 static const Protocol protocols[] = {
     {PNV_SERVICE_HYSTERIA2, hysteria2_fields, hysteria2_secret_fields, hysteria2_secrets, NULL},
     {PNV_SERVICE_AMNEZIAWG, amneziawg_fields, amneziawg_secret_fields, amneziawg_secrets, "awg-"},
+    {PNV_SERVICE_VLESS, vless_fields, vless_secret_fields, vless_secrets, NULL},
 };
 
 /* Upgrades vpn.data in place from schema `from` to from + 1; entry i handles schema i + 1. None yet. */
@@ -148,9 +181,11 @@ static const Field *find_data_field(const Protocol *protocol, const char *key, c
 
     if (!f)
         f = find_in(protocol->fields, key);
-    if (!f && protocol->param_prefix && g_str_has_prefix(key, protocol->param_prefix) &&
-        pnv_list_contains(allowlist, key))
-        f = &awg_param;
+    if (!f && protocol->param_prefix && g_str_has_prefix(key, protocol->param_prefix)) {
+        g_autofree char *entry = g_strconcat("awg/", key, NULL);
+        if (pnv_list_contains(allowlist, entry))
+            f = &awg_param;
+    }
     return f;
 }
 
@@ -174,6 +209,38 @@ static gboolean parse_range(const char *key, const char *value, guint max, PnvPr
         return FALSE;
     if (ends[1] && hi < lo)
         return fail(p, PNV_E_BAD_PORT_RANGE, key, NULL, 0, max);
+    return TRUE;
+}
+
+/* An X25519 public key as Xray writes it: base64url without padding, 43 characters. */
+static gboolean check_b64url32(const char *key, const char *value, PnvProblem *p)
+{
+    g_autofree char *std = g_strdup(value);
+    g_autofree char *padded = NULL;
+
+    if (strlen(value) != 43)
+        return fail(p, PNV_E_BAD_LENGTH, key, NULL, 32, 32);
+    for (char *c = std; *c; c++) {
+        if (*c == '-')
+            *c = '+';
+        else if (*c == '_')
+            *c = '/';
+        else if (*c == '+' || *c == '/')
+            return fail(p, PNV_E_BAD_BASE64, key, NULL, 0, 0);
+    }
+    padded = g_strconcat(std, "=", NULL);
+    return pnv_parse_base64(key, padded, 32, NULL, p);
+}
+
+static gboolean valid_uuid(const char *s)
+{
+    static const char shape[] = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+
+    if (strlen(s) != sizeof shape - 1)
+        return FALSE;
+    for (gsize i = 0; shape[i]; i++)
+        if (shape[i] == '-' ? s[i] != '-' : !g_ascii_isxdigit(s[i]))
+            return FALSE;
     return TRUE;
 }
 
@@ -260,7 +327,7 @@ static gboolean apply(const Field *f, const char *key, const char *value, const 
         return TRUE;
     case T_EXTRA:
         g_clear_pointer((JsonObject **)at, json_object_unref);
-        return pnv_parse_extra(key, value, allowlist, at, p);
+        return pnv_parse_extra(key, value, allowlist, f->list, at, p);
     case T_PORT:
         return pnv_parse_port(key, value, at, p);
     case T_KEY32:
@@ -279,8 +346,54 @@ static gboolean apply(const Field *f, const char *key, const char *value, const 
             return fail(p, PNV_E_MISSING, key, NULL, 0, 0);
         return TRUE;
     }
+    case T_ENUM_LIST: {
+        g_autofree char *entry = g_strconcat(f->list, value, NULL);
+        if (!pnv_list_contains(allowlist, entry))
+            return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+        g_free(*(char **)at);
+        *(char **)at = g_strdup(value);
+        return TRUE;
+    }
+    case T_B64URL32:
+        if (!check_b64url32(key, value, p))
+            return FALSE;
+        g_free(*(char **)at);
+        *(char **)at = g_strdup(value);
+        return TRUE;
+    case T_SHORT_ID:
+        if (strlen(value) > 16 || strlen(value) % 2 || strspn(value, "0123456789abcdefABCDEF") != strlen(value))
+            return fail(p, PNV_E_BAD_HEX, key, NULL, 0, 16);
+        g_free(*(char **)at);
+        *(char **)at = g_strdup(value);
+        return TRUE;
+    case T_URL_PATH:
+        /* An HTTP path: starts with '/', printable ASCII without spaces. */
+        if (value[0] != '/')
+            return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+        for (const char *c = value; *c; c++)
+            if ((guchar)*c <= 0x20 || (guchar)*c > 0x7e)
+                return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+        g_free(*(char **)at);
+        *(char **)at = g_strdup(value);
+        return TRUE;
+    case T_VLESS_ENCRYPTION:
+        /* "none", or the client string of VLESS Encryption: mlkem768x25519plus.<mode>.<rtt>[.<padding>...].<key> */
+        if (!g_str_equal(value, "none") && !(g_str_has_prefix(value, "mlkem768x25519plus.") &&
+                                             strspn(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+                                                           "0123456789._-") == strlen(value)))
+            return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+        g_free(*(char **)at);
+        *(char **)at = g_strdup(value);
+        return TRUE;
+    case T_UUID:
+        if (!valid_uuid(value))
+            return fail(p, PNV_E_BAD_HEX, key, NULL, 0, 0);
+        g_free(*(char **)at);
+        *(char **)at = g_strdup(value);
+        return TRUE;
     case T_AWG_PARAM: {
-        const char *const *fields = pnv_list_fields(allowlist, key);
+        g_autofree char *entry = g_strconcat("awg/", key, NULL);
+        const char *const *fields = pnv_list_fields(allowlist, entry);
         PnvAwgParam *param;
 
         if (!fields || !fields[0] || !fields[1])
@@ -306,6 +419,10 @@ static PnvProfile *profile_new(const char *service)
     profile->schema = PNV_SCHEMA_VERSION;
     profile->allow_lan = TRUE;
     profile->hysteria2.hop_interval = 30;
+    profile->vless.encryption = g_strdup("none");
+    profile->vless.tls_fingerprint = g_strdup("chrome");
+    profile->vless.xhttp_mode = g_strdup("auto");
+    profile->vless.xhttp_path = g_strdup("/");
     return profile;
 }
 
@@ -337,6 +454,17 @@ void pnv_profile_free(PnvProfile *profile)
     wipe(profile->amneziawg.private_key);
     wipe(profile->amneziawg.preshared_key);
     wipe(profile->amneziawg.header_protection_key);
+    g_free(profile->vless.encryption);
+    g_free(profile->vless.reality_pbk);
+    g_free(profile->vless.reality_sid);
+    g_free(profile->vless.reality_spx);
+    g_free(profile->vless.tls_sni);
+    g_free(profile->vless.tls_fingerprint);
+    g_free(profile->vless.xhttp_mode);
+    g_free(profile->vless.xhttp_path);
+    g_free(profile->vless.xhttp_host);
+    g_clear_pointer(&profile->vless.xhttp_extra, json_object_unref);
+    wipe(profile->vless.uuid);
     g_free(profile);
 }
 
