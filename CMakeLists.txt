@@ -2,12 +2,17 @@ cmake_minimum_required(VERSION 3.25)
 project(plasma-nm-vpn VERSION 0.1.0 LANGUAGES C CXX)
 
 option(BUILD_EDITORS "Build the plasma-nm editor plugins" ON)
+# The test build: hooks for the integration tests (design.md, "Testing"). Never in a package.
+option(PNV_TEST_HOOKS "Compile in the test hooks" OFF)
 include(CTest)
 include(GNUInstallDirs)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra>")
+if(PNV_TEST_HOOKS)
+    add_compile_definitions(PNV_TEST_HOOKS)
+endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBNM REQUIRED IMPORTED_TARGET libnm)
@@ -15,6 +20,7 @@ pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0 gio-2.0)
 pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 
 add_subdirectory(common/daemon)
+add_subdirectory(common/auth-dialog)
 add_subdirectory(backends/sb/daemon)
 
 if(BUILD_EDITORS)

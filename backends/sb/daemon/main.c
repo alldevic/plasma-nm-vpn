@@ -1,13 +1,23 @@
 /* SPDX-License-Identifier: MIT */
-#include <NetworkManager.h>
-#include <stdio.h>
-#include <string.h>
-
+/* The daemon for the protocols of the sing-box core. */
 #include "pnv-daemon.h"
+
+static gboolean hysteria2_connect(PnvSession *session, GError **error G_GNUC_UNUSED)
+{
+    /* The core is launched from 2.3 on; until then the connection stays in STARTING. */
+    pnv_message(session, "hysteria2: tunnel setup is not implemented yet");
+    return TRUE;
+}
+
+static const PnvProtocol hysteria2 = {
+    .service = "org.freedesktop.NetworkManager.pnv.hysteria2",
+    .name = "hysteria2",
+    .connect = hysteria2_connect,
+};
+
+static const PnvProtocol *const protocols[] = {&hysteria2, NULL};
 
 int main(int argc, char **argv)
 {
-    if (argc > 1 && strcmp(argv[1], "--version") == 0)
-        printf("%s (libnm %d.%d.%d)\n", pnv_version(), NM_MAJOR_VERSION, NM_MINOR_VERSION, NM_MICRO_VERSION);
-    return 0;
+    return pnv_daemon_main(argc, argv, protocols);
 }

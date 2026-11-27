@@ -1,5 +1,6 @@
 # Integration cases run as root inside the test VM, with the bench up (guest/prepare).
-# PNV_DNS_MODE is resolvconf or resolved; cases marked kvm need the VM's own kernel and run only with PNV_KVM=1.
+# PNV_DNS_MODE is resolvconf or resolved; cases marked kvm need the VM's own kernel and run only with PNV_KVM=1,
+# cases marked test_build need the daemons' test build installed (guest/install-daemon --test-hooks), PNV_TEST_BUILD=1.
 import os
 import subprocess
 
@@ -14,12 +15,14 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    if os.environ.get("PNV_KVM") == "1":
-        return
-    skip = pytest.mark.skip(reason="needs kvm: not a VM with its own kernel")
+    needs = {
+        "kvm": (os.environ.get("PNV_KVM") == "1", "needs kvm: not a VM with its own kernel"),
+        "test_build": (os.environ.get("PNV_TEST_BUILD") == "1", "needs the test build of the daemons"),
+    }
     for item in items:
-        if "kvm" in item.keywords:
-            item.add_marker(skip)
+        for marker, (available, reason) in needs.items():
+            if marker in item.keywords and not available:
+                item.add_marker(pytest.mark.skip(reason=reason))
 
 
 def sh(cmd, check=True, timeout=60):

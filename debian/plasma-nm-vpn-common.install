@@ -1,1 +1,2 @@
 debian/deactivate-connections usr/lib/plasma-nm-vpn/
+usr/lib/plasma-nm-vpn/plasma-nm-vpn-auth-dialog

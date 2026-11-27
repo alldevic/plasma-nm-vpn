@@ -1,0 +1,15 @@
+#!/bin/bash
+# install-daemon [--test-hooks]: build the daemons from the source tree (no editors) and install them with
+# their .name files and D-Bus policies, as the packages do. Run as root in the test VM.
+set -euo pipefail
+
+root=$(readlink -f "$(dirname "$0")/../../..")
+hooks=OFF
+[ "${1:-}" = --test-hooks ] && hooks=ON
+build=$(mktemp -d)
+trap 'rm -rf "$build"' EXIT
+
+cmake -S "$root" -B "$build" -DBUILD_EDITORS=OFF -DBUILD_TESTING=OFF -DPNV_TEST_HOOKS=$hooks -DCMAKE_INSTALL_PREFIX=/usr >/dev/null
+cmake --build "$build" >/dev/null
+cmake --install "$build" >/dev/null
+systemctl reload dbus

@@ -1,3 +1,5 @@
 add_executable(plasma-nm-vpn-service-sb main.c)
 target_link_libraries(plasma-nm-vpn-service-sb PRIVATE pnv-daemon)
 install(TARGETS plasma-nm-vpn-service-sb DESTINATION lib/plasma-nm-vpn)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../data/plasma-nm-vpn-hysteria2.name DESTINATION lib/NetworkManager/VPN)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../data/plasma-nm-vpn-sb.conf DESTINATION share/dbus-1/system.d)

@@ -1,0 +1,9 @@
+[VPN Connection]
+name=pnv-hysteria2
+service=org.freedesktop.NetworkManager.pnv.hysteria2
+program=/usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-sb
+supports-multiple-connections=true
+
+[GNOME]
+auth-dialog=/usr/lib/plasma-nm-vpn/plasma-nm-vpn-auth-dialog
+supports-external-ui-mode=true

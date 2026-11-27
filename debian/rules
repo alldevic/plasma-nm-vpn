@@ -19,7 +19,7 @@ BIN := usr/lib/plasma-nm-vpn/bin
 	dh $@ --buildsystem=cmake
 
 override_dh_auto_configure:
-	dh_auto_configure -- -DKDE_INSTALL_USE_QT_SYS_PATHS=ON
+	dh_auto_configure -- -DKDE_INSTALL_USE_QT_SYS_PATHS=ON -DPNV_TEST_HOOKS=OFF
 
 execute_after_dh_auto_install:
 	test -x $(CORES)/bin/sing-box || { echo "no cores in $(CORES): run scripts/fetch-cores $(CORES)" >&2; exit 1; }

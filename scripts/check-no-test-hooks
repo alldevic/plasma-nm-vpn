@@ -1,0 +1,12 @@
+#!/bin/bash
+# check-no-test-hooks <dir>: fail if any .deb in <dir> contains the test build's marker (PNV_TEST_HOOKS).
+set -euo pipefail
+found=0
+for deb in "${1:?usage: check-no-test-hooks <dir>}"/*.deb; do
+  if dpkg-deb --fsys-tarfile "$deb" | grep -aq PNV_TEST_HOOKS_ENABLED; then
+    echo "$(basename "$deb"): contains the test hooks" >&2
+    found=1
+  fi
+done
+[ $found = 0 ] && echo "no test hooks in the packages"
+exit $found

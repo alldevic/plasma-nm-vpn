@@ -51,6 +51,8 @@ jobs:
         run: |
           dpkg-buildpackage -b -us -uc
           mkdir out && mv ../*.deb out/
+      - name: No test hooks in the packages
+        run: scripts/check-no-test-hooks out
       - name: Lintian
         run: lintian --fail-on none --tag-display-limit 0 out/*.deb
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
