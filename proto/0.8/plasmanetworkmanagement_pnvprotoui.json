@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Category": "VPNService",
+        "Description": "Prototype editor (milestone 0.8)",
+        "Description[ru]": "Прототип редактора (веха 0.8)",
+        "EnabledByDefault": false,
+        "License": "MIT",
+        "Name": "PNV proto",
+        "Name[ru]": "PNV прототип",
+        "Version": "0.1"
+    },
+    "X-NetworkManager-Services": "org.freedesktop.NetworkManager.pnv-proto"
+}
