@@ -1,0 +1,29 @@
+name: upstream-watch
+
+# Once a day: plasma-nm editor headers in sid and new core versions → issues (scripts/upstream-watch).
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    container: debian:sid
+    steps:
+      - name: Tools and deb-src for sid
+        run: |
+          sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ca-certificates curl dpkg-dev gh
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare with upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/upstream-watch

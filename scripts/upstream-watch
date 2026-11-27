@@ -1,0 +1,71 @@
+#!/bin/bash
+# upstream-watch: compare the vendored plasma-nm editor headers with plasma-nm in sid, and the pinned cores
+# with their latest upstream versions; open an issue (labels "upstream" and "plasma-nm" or "core") for each
+# difference that has no open issue with the same title yet. Any failure of the check itself fails the run.
+# Needs apt-get source for sid (deb-src), dpkg-dev, curl, and gh with GH_TOKEN allowed to write issues.
+set -euo pipefail
+. "$(dirname "$(readlink -f "$0")")/cores.sh"
+
+repo=${GITHUB_REPOSITORY:?}
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+report() { echo "$*"; [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "- $*" >> "$GITHUB_STEP_SUMMARY"; }
+
+issue() { # issue TITLE LABEL BODYFILE: unless an open issue has exactly this title
+  if gh issue list --repo "$repo" --state open --label upstream --limit 500 --json title --jq '.[].title' |
+    grep -Fxq -- "$1"; then
+    report "open issue already: $1"
+  else
+    report "new issue: $(gh issue create --repo "$repo" --title "$1" --label upstream --label "$2" --body-file "$3")"
+  fi
+}
+
+# plasma-nm: the three headers the editors are built against (third_party/plasma-nm), as patched in sid.
+vendored=$(cat "$root/third_party/plasma-nm/VERSION")
+versions=$(curl -fsS "https://api.ftp-master.debian.org/madison?package=plasma-nm&text=on&s=sid,forky&a=source")
+(cd "$work" && apt-get source -qq plasma-nm >/dev/null)
+src=$(find "$work" -maxdepth 1 -type d -name 'plasma-nm-*' | head -1)
+sid=$(dpkg-parsechangelog -l "$src/debian/changelog" -S Version)
+report "plasma-nm: sid $sid; vendored headers from $vendored"
+for h in libs/editor/vpnuiplugin.h libs/editor/widgets/settingwidget.h libs/editor/widgets/passwordfield.h; do
+  diff -u --label "third_party/plasma-nm/${h##*/} ($vendored)" --label "$h (sid $sid)" \
+    "$root/third_party/plasma-nm/${h##*/}" "$src/$h" || true
+done > "$work/headers.diff"
+if [ -s "$work/headers.diff" ]; then
+  { echo "plasma-nm in Debian (madison):"; echo '```'; echo "$versions"; echo '```'
+    echo "The editor headers in sid differ from those vendored from $vendored. Decide whether the ABI changed"
+    echo "(rebuild and update third_party/plasma-nm) before the new plasma-nm migrates to forky (~5 days)."
+    echo; echo '```diff'; cat "$work/headers.diff"; echo '```'; } > "$work/body"
+  issue "plasma-nm $sid: editor headers differ from $vendored" plasma-nm "$work/body"
+fi
+
+latest_release() { # latest_release REPO: the tag of the latest stable release
+  gh api "repos/$1/releases/latest" --jq '.html_url + " " + .tag_name'
+}
+latest_tag() { # latest_tag REPO: the highest vX.Y.Z tag
+  gh api --paginate "repos/$1/tags" --jq '.[].name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1
+}
+
+for core in sb xray amneziawg-go amneziawg-tools; do
+  r=$(pin "$core" REPO) pinned=$(pin "$core" VERSION)
+  case $core in
+    sb|xray)
+      read -r url tag <<<"$(latest_release "$r")"
+      # The link must lead to the repository pinned in cores/, not somewhere the API redirected to.
+      [[ $url == "https://github.com/$r/releases/tag/$tag" ]] || die "$core: release link $url is not in $r"
+      ;;
+    *) tag=$(latest_tag "$r") url=https://github.com/$r/releases/tag/$tag ;;
+  esac
+  latest=${tag#v}
+  report "$core: pinned $pinned, upstream $latest"
+  [ "$latest" = "$pinned" ] && continue
+  [ "$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | tail -1)" = "$latest" ] || continue
+  { echo "$r $tag is out; cores/$core.env pins $pinned."
+    echo; echo "Release: $url"
+    if [ "$core" = sb ]; then
+      echo; echo "Check that the release still runs without root in our sandbox (design.md, risk “sing-box is moving"
+      echo "away from running without root”): the 0.4 checks of the core as \`plasma-nm-vpn\` on a persistent TUN."
+    fi; } > "$work/body"
+  issue "$(basename "$r") $latest released (pinned $pinned)" core "$work/body"
+done
