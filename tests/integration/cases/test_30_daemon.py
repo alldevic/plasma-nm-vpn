@@ -29,7 +29,7 @@ def wait_for(predicate, timeout=20):
     return False
 
 
-def profile(name, service=SERVICE, data="server=198.51.100.1, port=443", flags=0):
+def profile(name, service=SERVICE, data="server=198.51.100.1, ports=443", flags=0):
     sh(f"nmcli connection delete {name}", check=False)
     sh(f"nmcli connection add type vpn con-name {name} autoconnect no vpn-type {service} "
        f"vpn.data '{data}, password-flags={flags}'")
@@ -106,7 +106,7 @@ def test_unknown_service_type_fails_without_launching(since, passwd, unknown_ser
 
 
 def test_give_up_fails_the_connection_with_a_reason(since, passwd):
-    name = profile("pnv-t-giveup", data="server=198.51.100.1, port=443, pnv-test-hook=give-up")
+    name = profile("pnv-t-giveup", data="server=198.51.100.1, ports=443, pnv-test-hook=give-up")
     r = subprocess.run(["nmcli", "--wait", "30", "connection", "up", name, "passwd-file", str(passwd)],
                        capture_output=True, text=True)
     assert r.returncode != 0

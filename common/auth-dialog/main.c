@@ -6,6 +6,13 @@
 
 #include "pnv-daemon.h"
 
+/* With -r every secret the profile uses is asked again, stored or not. */
+static gboolean needed(NMSettingVpn *s_vpn, const PnvSecret *secret)
+{
+    const char *when = secret->when ? nm_setting_vpn_get_data_item(s_vpn, secret->when) : NULL;
+    return !secret->when || (when && *when);
+}
+
 int main(int argc, char **argv)
 {
     g_autofree char *uuid = NULL, *name = NULL, *service = NULL;
@@ -61,7 +68,7 @@ int main(int argc, char **argv)
         g_key_file_set_string(out, secret->key, "Label", secret->label);
         g_key_file_set_boolean(out, secret->key, "IsSecret", TRUE);
         g_key_file_set_boolean(out, secret->key, "ShouldAsk",
-                               interactive && (renew || pnv_secret_missing(s_vpn, secret->key)));
+                               interactive && (renew ? needed(s_vpn, secret) : pnv_secret_needed(s_vpn, secret)));
     }
     text = g_key_file_to_data(out, NULL, NULL);
     fputs(text, stdout);

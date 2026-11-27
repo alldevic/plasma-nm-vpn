@@ -1,0 +1,63 @@
+name: fuzz
+
+# Once a week: each libFuzzer target in tests/fuzz for 30 minutes under ASan and UBSan. The corpus grows across
+# runs in the cache; a crash fails the run and its input is kept as an artifact.
+on:
+  schedule:
+    - cron: '41 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Time per target
+        default: '1800'
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    container: debian:forky
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [profile, extra]
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ca-certificates clang cmake make pkgconf \
+            libglib2.0-dev libjson-glib-dev libnm-dev
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Restore the corpus
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: corpus
+          key: fuzz-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-${{ matrix.target }}-
+      - name: Build
+        run: |
+          cmake -S . -B build -DBUILD_EDITORS=OFF -DBUILD_TESTING=OFF -DCMAKE_C_COMPILER=clang -DPNV_FUZZ=ON
+          cmake --build build --target fuzz-${{ matrix.target }}
+      - name: Fuzz
+        env:
+          SECONDS_PER_TARGET: ${{ inputs.seconds || '1800' }}
+        run: |
+          mkdir -p corpus crashes
+          build/tests/fuzz/fuzz-${{ matrix.target }} -max_total_time="$SECONDS_PER_TARGET" -timeout=10 \
+            -rss_limit_mb=2048 -artifact_prefix=crashes/ -print_final_stats=1 \
+            corpus tests/fuzz/corpus/${{ matrix.target }}
+      - name: Save the corpus
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: corpus
+          key: fuzz-${{ matrix.target }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: crashes-${{ matrix.target }}
+          path: crashes/

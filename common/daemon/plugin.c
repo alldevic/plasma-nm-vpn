@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: MIT */
+#include <string.h>
+
 #include "pnv-daemon.h"
 
 typedef struct {
@@ -20,6 +22,7 @@ struct PnvSession {
     NMVpnServicePlugin *plugin;
     NMConnection *connection;
     const PnvProtocol *protocol;
+    PnvProfile *profile;
     GPtrArray *cleanups;
 };
 
@@ -39,6 +42,11 @@ NMConnection *pnv_session_connection(PnvSession *s)
 const char *pnv_session_uuid(PnvSession *s)
 {
     return s->connection ? nm_connection_get_uuid(s->connection) : "-";
+}
+
+const PnvProfile *pnv_session_profile(PnvSession *s)
+{
+    return s->profile;
 }
 
 void pnv_log(PnvSession *s, GLogLevelFlags level, const char *fmt, ...)
@@ -119,6 +127,51 @@ static void test_hooks(PnvSession *s)
 }
 #endif
 
+static void add_item(const char *key, const char *value, gpointer table)
+{
+    g_hash_table_insert(table, g_strdup(key), g_strdup(value ? value : ""));
+}
+
+/* Secrets are wiped when the tables go. */
+static void free_secret(gpointer value)
+{
+    explicit_bzero(value, strlen(value));
+    g_free(value);
+}
+
+/* Nothing is launched for a profile that does not pass validation in full; the reason never quotes a value. */
+static PnvProfile *parse_profile(PnvSession *s, GError **error)
+{
+    NMSettingVpn *s_vpn = nm_connection_get_setting_vpn(s->connection);
+    g_autoptr(GHashTable) data = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    g_autoptr(GHashTable) secrets = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free_secret);
+    g_autoptr(PnvList) allowed = NULL;
+    g_auto(PnvProblem) problem = {0};
+    g_autofree char *reason = NULL;
+    PnvProfile *profile;
+
+    nm_setting_vpn_foreach_data_item(s_vpn, add_item, data);
+    nm_setting_vpn_foreach_secret(s_vpn, add_item, secrets);
+#ifdef PNV_TEST_HOOKS
+    g_hash_table_remove(data, "pnv-test-hook");
+#endif
+    if (s->protocol->extra_allowlist) {
+        allowed = pnv_list_load(s->protocol->extra_allowlist, &problem);
+        if (!allowed) {
+            reason = pnv_problem_describe(&problem);
+            pnv_warning(s, "%s: extra is refused", reason);
+            g_clear_pointer(&reason, g_free);
+        }
+    }
+    profile = pnv_profile_parse(s->protocol->service, data, secrets, allowed, &problem);
+    if (!profile) {
+        reason = pnv_problem_describe(&problem);
+        pnv_warning(s, "profile rejected (%s): %s", pnv_code_name(problem.code), reason);
+        g_set_error(error, NM_VPN_PLUGIN_ERROR, NM_VPN_PLUGIN_ERROR_BAD_ARGUMENTS, "invalid profile: %s", reason);
+    }
+    return profile;
+}
+
 static gboolean real_connect(NMVpnServicePlugin *plugin G_GNUC_UNUSED, NMConnection *connection, GError **error)
 {
     const PnvProtocol *protocol = find_protocol(connection, error);
@@ -130,6 +183,9 @@ static gboolean real_connect(NMVpnServicePlugin *plugin G_GNUC_UNUSED, NMConnect
     session.connection = g_object_ref(connection);
     session.protocol = protocol;
     pnv_message(&session, "Connect: %s (%s)", protocol->name, nm_connection_get_id(connection));
+    session.profile = parse_profile(&session, error);
+    if (!session.profile)
+        return FALSE;
 #ifdef PNV_TEST_HOOKS
     test_hooks(&session);
 #endif
@@ -145,7 +201,7 @@ static gboolean real_need_secrets(NMVpnServicePlugin *plugin G_GNUC_UNUSED, NMCo
     if (!protocol)
         return FALSE;
     for (const PnvSecret *secret = pnv_service_secrets(protocol->service); secret && secret->key; secret++) {
-        if (!pnv_secret_missing(s_vpn, secret->key))
+        if (!pnv_secret_needed(s_vpn, secret))
             continue;
         pnv_message(NULL, "%s: secret %s is missing, asking NM for it", nm_connection_get_uuid(connection),
                     secret->key);

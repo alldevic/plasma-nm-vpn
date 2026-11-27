@@ -4,6 +4,8 @@
 
 #include <NetworkManager.h>
 
+#include "pnv-profile.h"
+
 /* One daemon process serves one VPN connection (supports-multiple-connections=true). */
 typedef struct PnvSession PnvSession;
 
@@ -12,19 +14,14 @@ typedef void (*PnvCleanup)(PnvSession *session);
 typedef struct {
     const char *service;           /* vpn.service-type, e.g. org.freedesktop.NetworkManager.pnv.hysteria2 */
     const char *name;              /* for the journal */
-    /* Starts the connection. Errors before the core is launched go to error; later ones through pnv_give_up(). */
+    const char *extra_allowlist;   /* the list file for extra; NULL: extra is refused */
+    /* Starts the connection from the validated profile. Errors before the core is launched go to error; later
+     * ones through pnv_give_up(). */
     gboolean (*connect)(PnvSession *session, GError **error);
 } PnvProtocol;
 
-/* The secrets of a service type, shared with the auth dialog; NULL-terminated, NULL for unknown types. */
-typedef struct {
-    const char *key;
-    const char *label;
-} PnvSecret;
-
-const PnvSecret *pnv_service_secrets(const char *service);
-/* Not in vpn.secrets and its <key>-flags do not say NOT_REQUIRED. */
-gboolean pnv_secret_missing(NMSettingVpn *s_vpn, const char *key);
+/* Needed (its `when` key is set), not in vpn.secrets, and its <key>-flags do not say NOT_REQUIRED. */
+gboolean pnv_secret_needed(NMSettingVpn *s_vpn, const PnvSecret *secret);
 
 /* The daemon's main(): --bus-name, --debug, the plugin on the bus, the main loop. */
 int pnv_daemon_main(int argc, char **argv, const PnvProtocol *const *protocols);
@@ -33,6 +30,7 @@ const char *pnv_version(void);
 
 NMConnection *pnv_session_connection(PnvSession *session);
 const char *pnv_session_uuid(PnvSession *session);
+const PnvProfile *pnv_session_profile(PnvSession *session);
 
 /* Registers a cleanup step; disconnect runs the steps synchronously, last registered first. */
 void pnv_session_add_cleanup(PnvSession *session, const char *name, PnvCleanup step);
