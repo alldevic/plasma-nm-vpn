@@ -46,7 +46,7 @@ const char *pnv_session_parent(PnvSession *s)
 
 guint pnv_session_mtu(PnvSession *s)
 {
-    return s->profile->mtu ? s->profile->mtu : DEFAULT_MTU;
+    return s->profile->mtu ? s->profile->mtu : s->protocol->default_mtu ? s->protocol->default_mtu : DEFAULT_MTU;
 }
 
 static void stop_guard(PnvSession *s)
@@ -164,6 +164,11 @@ static gboolean cleanup_orphans(PnvSession *s, GError **error)
     if (pnv_tun_exists(s->tun)) {
         pnv_message(s, "deleting the leftover interface %s", s->tun);
         pnv_tun_delete(s->tun);
+    }
+    {
+        g_autofree char *sock = pnv_uapi_socket(s->tun);
+        if (g_unlink(sock) == 0)
+            pnv_message(s, "removed the leftover %s", sock);
     }
     pnv_guard_remove(s->uuid);
     return TRUE;
@@ -285,10 +290,20 @@ static gboolean reserve_subnet(PnvSession *s, GError **error)
 {
     guint32 a;
 
-    if (!pnv_pool_reserve(s->uuid, s->run_dir, &s->network, error))
-        return FALSE;
-    a = s->network + 1;
-    g_snprintf(s->tun_cidr, sizeof s->tun_cidr, "%u.%u.%u.%u/30", a >> 24, a >> 16 & 0xff, a >> 8 & 0xff, a & 0xff);
+    if (s->protocol->tun_address) {
+        if (!s->protocol->tun_address(s, &s->tun_address, &s->tun_prefix)) {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "the profile has no IPv4 TUN address");
+            return FALSE;
+        }
+    } else {
+        if (!pnv_pool_reserve(s->uuid, s->run_dir, &s->network, error))
+            return FALSE;
+        s->tun_address = s->network + 1;
+        s->tun_prefix = 30;
+    }
+    a = s->tun_address;
+    g_snprintf(s->tun_cidr, sizeof s->tun_cidr, "%u.%u.%u.%u/%u", a >> 24, a >> 16 & 0xff, a >> 8 & 0xff, a & 0xff,
+               s->tun_prefix);
     pnv_message(s, "TUN address %s", s->tun_cidr);
     return TRUE;
 }
@@ -367,7 +382,7 @@ gboolean pnv_session_start_core(PnvSession *s, const PnvCore *core, const char *
     if (g_strcmp0(s->test_hook, "broken-config") == 0)
         config = "{\"broken\":";
 #endif
-    if (!g_file_set_contents_full(config_path, config, -1, G_FILE_SET_CONTENTS_CONSISTENT, 0600, error))
+    if (config && !g_file_set_contents_full(config_path, config, -1, G_FILE_SET_CONTENTS_CONSISTENT, 0600, error))
         return FALSE;
     g_ptr_array_add(argv, binary);
     for (const char *const *a = core->args; a && *a; a++)
@@ -379,7 +394,10 @@ gboolean pnv_session_start_core(PnvSession *s, const PnvCore *core, const char *
     g_variant_builder_init(&p, G_VARIANT_TYPE("a(sv)"));
     pnv_prop(&p, "Description", g_variant_new_string(description));
     pnv_prop(&p, "ExecStart", pnv_command((const char *const *)argv->pdata));
-    pnv_prop(&p, "LoadCredential", g_variant_builder_end(&credentials));
+    if (config)
+        pnv_prop(&p, "LoadCredential", g_variant_builder_end(&credentials));
+    else
+        g_variant_builder_clear(&credentials);
     pnv_prop(&p, "User", g_variant_new_string(PNV_CORE_USER));
     pnv_prop(&p, "AmbientCapabilities", g_variant_new_uint64(core->capabilities));
     pnv_prop(&p, "CapabilityBoundingSet", g_variant_new_uint64(core->capabilities));
@@ -469,8 +487,8 @@ void pnv_session_send_config(PnvSession *s)
             g_variant_builder_add_value(&servers, ip4(*d));
     }
     g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
-    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ADDRESS, g_variant_new_uint32(htonl(s->network + 1)));
-    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_PREFIX, g_variant_new_uint32(30));
+    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ADDRESS, g_variant_new_uint32(htonl(s->tun_address)));
+    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_PREFIX, g_variant_new_uint32(s->tun_prefix));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_DNS, g_variant_builder_end(&servers));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ROUTES, g_variant_builder_end(&routes));
     nm_vpn_service_plugin_set_ip4_config(s->plugin, g_variant_builder_end(&b));

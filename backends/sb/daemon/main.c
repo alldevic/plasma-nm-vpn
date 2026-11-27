@@ -38,7 +38,7 @@ static gboolean hysteria2_connect(PnvSession *session, GError **error)
 static const PnvProtocol hysteria2 = {
     .service = PNV_SERVICE_HYSTERIA2,
     .name = "hysteria2",
-    .extra_allowlist = TEMPLATE_DIR "/hysteria2-extra.list",
+    .allowlist = TEMPLATE_DIR "/hysteria2-extra.list",
     .connect = hysteria2_connect,
 };
 

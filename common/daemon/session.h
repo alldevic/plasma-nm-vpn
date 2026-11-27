@@ -18,6 +18,8 @@ struct PnvSession {
     char *server_ip;
     gboolean server_literal;
     guint32 network;  /* the reserved /30, host byte order */
+    guint32 tun_address;
+    guint tun_prefix;
     char tun_cidr[24];
     char *parent;
     NMClient *client;

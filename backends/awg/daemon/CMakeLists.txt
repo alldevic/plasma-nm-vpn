@@ -1,0 +1,10 @@
+add_library(pnv-awg-config STATIC config.c)
+target_include_directories(pnv-awg-config PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pnv-awg-config PUBLIC pnv-profile)
+
+add_executable(plasma-nm-vpn-service-awg main.c)
+target_link_libraries(plasma-nm-vpn-service-awg PRIVATE pnv-daemon pnv-awg-config)
+install(TARGETS plasma-nm-vpn-service-awg DESTINATION lib/plasma-nm-vpn)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../data/plasma-nm-vpn-amneziawg.name DESTINATION lib/NetworkManager/VPN)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../data/plasma-nm-vpn-awg.conf DESTINATION share/dbus-1/system.d)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../data/amneziawg-params.list DESTINATION share/plasma-nm-vpn/amneziawg)

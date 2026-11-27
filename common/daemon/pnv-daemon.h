@@ -15,7 +15,10 @@ typedef void (*PnvCleanup)(PnvSession *session);
 typedef struct {
     const char *service;           /* vpn.service-type, e.g. org.freedesktop.NetworkManager.pnv.hysteria2 */
     const char *name;              /* for the journal */
-    const char *extra_allowlist;   /* the list file for extra; NULL: extra is refused */
+    const char *allowlist;         /* the list file for extra or awg-* parameters; NULL: those are refused */
+    guint default_mtu;             /* without mtu in the profile; 0: 1400 */
+    /* The profile brings its own TUN address (AmneziaWG); without this, a /30 from the pool. */
+    gboolean (*tun_address)(PnvSession *session, guint32 *address, guint *prefix);
     /* Called once the run directory, the guard unit and the TUN exist: generates the config and calls
      * pnv_session_start_core(). An error fails the connection. */
     gboolean (*connect)(PnvSession *session, GError **error);
@@ -69,6 +72,7 @@ int pnv_tun_carrier(const char *name);
 gboolean pnv_uuid_valid(const char *uuid);
 char *pnv_run_dir(const char *uuid);
 void pnv_run_dir_remove(const char *path);
+char *pnv_uapi_socket(const char *tun); /* /run/amneziawg/<tun>.sock */
 gboolean pnv_daemon_gone(const char *uuid);
 char *pnv_tun_owner(const char *uuid);
 
@@ -80,6 +84,8 @@ typedef struct {
     guint64 capabilities;                /* ambient and bounding set */
     const char *const *read_write_paths; /* NULL-terminated, or NULL */
 } PnvCore;
+
+/* config may be NULL for a core configured otherwise (AmneziaWG over UAPI): no LoadCredential= then. */
 
 /* Writes the config, starts the core unit and waits until it has attached to the TUN. */
 gboolean pnv_session_start_core(PnvSession *session, const PnvCore *core, const char *config, GError **error);

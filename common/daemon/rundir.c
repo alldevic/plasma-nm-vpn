@@ -40,6 +40,7 @@ gboolean pnv_daemon_gone(const char *uuid)
 {
     g_autofree char *run = pnv_run_dir(uuid);
     g_autofree char *core = pnv_unit_name("core", uuid);
+    g_autofree char *socket_path = NULL;
     char tun[IFNAMSIZ];
     gboolean ok;
 
@@ -49,6 +50,7 @@ gboolean pnv_daemon_gone(const char *uuid)
     ok = pnv_unit_wait_down(core, 10000);
     pnv_tun_name(uuid, tun);
     pnv_tun_delete(tun);
+    g_unlink(socket_path = pnv_uapi_socket(tun));
     pnv_guard_remove(uuid);
 #ifdef PNV_TEST_HOOKS
     {
@@ -59,6 +61,12 @@ gboolean pnv_daemon_gone(const char *uuid)
 #endif
     pnv_run_dir_remove(run);
     return ok;
+}
+
+/* amneziawg-go's UAPI socket; kill -9 leaves it behind (0.4). */
+char *pnv_uapi_socket(const char *tun)
+{
+    return g_strdup_printf("/run/amneziawg/%s.sock", tun);
 }
 
 /* Another profile whose UUID starts with the same 8 characters and whose daemon is alive owns the TUN name. */

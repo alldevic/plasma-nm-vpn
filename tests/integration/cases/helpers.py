@@ -8,7 +8,7 @@ from conftest import sh
 SERVICE = "org.freedesktop.NetworkManager.pnv.hysteria2"
 UNKNOWN = "org.freedesktop.NetworkManager.pnv.test-unknown"
 PASSWORD = "s3cret-never-logged"
-DAEMON = "/usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-sb"
+DAEMON = "/usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-"
 
 
 def ok(cmd):
@@ -92,13 +92,13 @@ def gone(uuid):
     return not units(uuid) and not tun_exists(uuid) and not run_dir_exists(uuid)
 
 
-def keyfile(name, data, secrets=None, never_default=False, uuid=None):
+def keyfile(name, data, secrets=None, never_default=False, uuid=None, service=SERVICE):
     """A test .nmconnection (0600) in system-connections, loaded with nmcli; returns its UUID."""
     import uuid as uuidlib
     sh(f"nmcli connection delete {name}", check=False)
     uuid = uuid or str(uuidlib.uuid4())
     lines = ["[connection]", f"id={name}", f"uuid={uuid}", "type=vpn", "autoconnect=false", "",
-             "[vpn]", f"service-type={SERVICE}", "persistent=true"]
+             "[vpn]", f"service-type={service}", "persistent=true"]
     lines += [f"{k}={v}" for k, v in data.items()]
     lines += [f"{k}-flags=0" for k in (secrets or {})]
     if secrets:

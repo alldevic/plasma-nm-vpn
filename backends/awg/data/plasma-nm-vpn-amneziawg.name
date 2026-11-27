@@ -1,0 +1,9 @@
+[VPN Connection]
+name=pnv-amneziawg
+service=org.freedesktop.NetworkManager.pnv.amneziawg
+program=/usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-awg
+supports-multiple-connections=true
+
+[GNOME]
+auth-dialog=/usr/lib/plasma-nm-vpn/plasma-nm-vpn-auth-dialog
+supports-external-ui-mode=true

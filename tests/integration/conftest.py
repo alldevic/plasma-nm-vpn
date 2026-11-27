@@ -39,7 +39,8 @@ def sh(cmd, check=True, timeout=60):
 
 
 TEST_BUILD_DIR = os.environ.get("PNV_TEST_BUILD_DIR")
-TEST_BINARIES = ["usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-sb", "usr/bin/plasma-nm-vpn-guard"]
+TEST_BINARIES = ["usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-sb", "usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-awg",
+                 "usr/bin/plasma-nm-vpn-guard"]
 
 
 @pytest.fixture(autouse=True)

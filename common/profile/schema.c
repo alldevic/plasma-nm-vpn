@@ -191,9 +191,10 @@ static gboolean check_param(const char *key, const char *type, const char *value
     if (g_strcmp0(type, "onoff") == 0)
         return g_str_equal(value, "on") || g_str_equal(value, "off") ? TRUE : fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
     if (g_strcmp0(type, "chain") == 0) {
-        /* Tag chains like <b 0x...><r 16>: printable ASCII, parsed by amneziawg-go. */
+        /* Tag chains like <b 0x...><r 16>: printable ASCII, parsed by amneziawg-go; no '#', which starts a
+         * comment in the awg config, and no '=' or '[', which would read as another key or section. */
         for (const char *c = value; *c; c++)
-            if ((guchar)*c < 0x20 || (guchar)*c > 0x7e)
+            if ((guchar)*c < 0x20 || (guchar)*c > 0x7e || strchr("#=[]", *c))
                 return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
         return TRUE;
     }

@@ -18,3 +18,8 @@ add_test(NAME sb-config COMMAND test-sb-config ${PROJECT_SOURCE_DIR}/backends/sb
 add_executable(test-awg-profile test_awg_profile.c)
 target_link_libraries(test-awg-profile PRIVATE pnv-profile)
 add_test(NAME awg-profile COMMAND test-awg-profile ${PROJECT_SOURCE_DIR}/backends/awg/data/amneziawg-params.list)
+
+add_executable(test-awg-config test_awg_config.c)
+target_link_libraries(test-awg-config PRIVATE pnv-awg-config)
+add_test(NAME awg-config COMMAND test-awg-config ${PROJECT_SOURCE_DIR}/backends/awg/data/amneziawg-params.list
+         ${PROJECT_SOURCE_DIR}/tests/golden/amneziawg-tools-v3.1.20260812)

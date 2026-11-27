@@ -151,11 +151,11 @@ static PnvProfile *parse_profile(PnvSession *s, GError **error)
 #ifdef PNV_TEST_HOOKS
     g_hash_table_remove(data, "pnv-test-hook");
 #endif
-    if (s->protocol->extra_allowlist) {
-        allowed = pnv_list_load(s->protocol->extra_allowlist, &problem);
+    if (s->protocol->allowlist) {
+        allowed = pnv_list_load(s->protocol->allowlist, &problem);
         if (!allowed) {
             reason = pnv_problem_describe(&problem);
-            pnv_warning(s, "%s: extra is refused", reason);
+            pnv_warning(s, "%s: allowlisted keys are refused", reason);
             g_clear_pointer(&reason, g_free);
         }
     }

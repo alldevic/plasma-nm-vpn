@@ -1,0 +1,4 @@
+usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-awg
+usr/lib/NetworkManager/VPN/plasma-nm-vpn-amneziawg.name
+usr/share/dbus-1/system.d/plasma-nm-vpn-awg.conf
+usr/share/plasma-nm-vpn/amneziawg/
