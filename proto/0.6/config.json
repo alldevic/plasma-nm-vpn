@@ -1,0 +1,18 @@
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [
+    {"tag": "tun", "port": 0, "protocol": "tun", "settings": {"name": "@TUN@"}}
+  ],
+  "outbounds": [
+    {"tag": "proxy", "protocol": "vless",
+     "settings": {"vnext": [{"address": "@SERVER@", "port": 443,
+       "users": [{"id": "@VLESS_UUID@", "encryption": "none"}]}]},
+     "streamSettings": {
+       "network": "xhttp", "xhttpSettings": {"path": "@VLESS_PATH@"},
+       "security": "reality",
+       "realitySettings": {"serverName": "www.stand.test", "fingerprint": "chrome",
+         "password": "@REALITY_PUBLIC@", "shortId": "@VLESS_SHORT_ID@"},
+       "sockopt": {"interface": "@PARENT@"}}}
+  ],
+  "routing": {"rules": [{"type": "field", "inboundTag": ["tun"], "outboundTag": "proxy"}]}
+}

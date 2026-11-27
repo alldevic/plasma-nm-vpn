@@ -1,0 +1,28 @@
+== NM-like setup: address, /32 to the server, default route through the TUN
+  default dev pnv-1a2b3c4d scope link metric 50 
+  default via 192.0.2.1 dev stand-cli proto static metric 101 
+  10.107.186.0/24 dev enp1s0 proto kernel scope link src 10.107.186.122 metric 100 
+  192.0.2.0/24 dev stand-cli proto kernel scope link src 192.0.2.2 metric 101 
+  192.168.77.0/24 dev stand-cli proto kernel scope link src 192.168.77.2 metric 101 
+  198.18.0.0/30 dev pnv-1a2b3c4d proto kernel scope link src 198.18.0.1 
+  198.51.100.1 via 192.0.2.1 dev stand-cli 
+== traffic
+  curl:        200 20B 0.003351s
+  dig udp:     203.0.113.1
+  dig tcp:     203.0.113.1
+  dig 1.1.1.1: ns.stand.test. hostmaster.ns.stand.test.
+  8 MB:        200 8388608B 0.032030s
+  stand-cli: 2714 packets to/from 198.51.100.1:443, 0 other
+  stand-cli other: 
+  pnv-1a2b3c4d: 0 packets to 198.51.100.1, 4 DNS packets, 9988 to 203.0.113.1
+  xray CPU after the checks: 0.0%
+== without the /32 to the server
+  curl: 200 20B 0.002828s   dig: 203.0.113.1
+  stand-cli: 40 to the server; pnv-1a2b3c4d: 0 to the server
+== restart under load
+  stop 08:22:05.2, start 08:22:08.2, attached 08:22:08.3
+  address: 198.18.0.1/30, default: 1 via pnv-1a2b3c4d
+  route events: 0 (0 deletions)
+  direct to 203.0.113.1 on stand-cli: 0 packets
+  curl loop: 37 ok, 3 failed; failures from 08:22:05.3 to 08:22:07.8
+  after: 200 20B 0.001389s

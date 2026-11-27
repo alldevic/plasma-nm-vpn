@@ -1,0 +1,80 @@
+#!/bin/bash
+# The 0.6 checks: xray on the persistent TUN with the default route through it. Run as root with
+# the bench up (proto/stand/stand-up vless) and the 0.4 core user and tmpfiles in place.
+set -uo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+U=1a2b3c4d-0000-4000-8000-000000000000
+tun=pnv-${U:0:8} unit=plasma-nm-vpn-core-$U.service
+cfg=/etc/pnv-proto/0.6/config.json
+www=/run/pnv-stand/www-inet
+
+. "$here/../stand/secrets/env"
+install -d -m 0750 -g plasma-nm-vpn "${cfg%/*}"
+sed -e "s|@TUN@|$tun|; s|@SERVER@|198.51.100.1|; s|@VLESS_UUID@|$VLESS_UUID|; s|@VLESS_PATH@|$VLESS_PATH|" \
+    -e "s|@REALITY_PUBLIC@|$REALITY_PUBLIC|; s|@VLESS_SHORT_ID@|$VLESS_SHORT_ID|; s|@PARENT@|stand-cli|" \
+    "$here/config.json" > "$cfg"
+chgrp plasma-nm-vpn "$cfg"; chmod 0640 "$cfg"
+head -c 8M /dev/urandom > "$www/big.bin"
+
+up() {
+  "$here/../0.4/run-core" xray "$cfg" "$U"
+  for _ in $(seq 50); do [ "$(cat /sys/class/net/$tun/carrier 2>/dev/null)" = 1 ] && return; sleep 0.1; done
+}
+count() { tcpdump -nr "/tmp/cap-$sec-$1.pcap" "$2" 2>/dev/null | wc -l; }
+fetch() { curl -s -m 8 -o /dev/null -w '%{http_code} %{size_download}B %{time_total}s' "$@" || echo "FAIL rc=$?"; }
+
+ip link del $tun 2>/dev/null; ip tuntap add dev $tun mode tun user plasma-nm-vpn
+up
+echo "== NM-like setup: address, /32 to the server, default route through the TUN"
+ip addr add 198.18.0.1/30 dev $tun; ip link set $tun mtu 1400 up
+ip route replace 198.51.100.1/32 via 192.0.2.1 dev stand-cli
+ip route replace default dev $tun metric 50
+ip -4 route | sed 's/^/  /'
+
+sec=t
+echo "== traffic"
+tcpdump -Z root -nli stand-cli -w /tmp/cap-$sec-stand-cli.pcap 2>/dev/null & c1=$!
+tcpdump -Z root -nli $tun -w /tmp/cap-$sec-$tun.pcap 2>/dev/null & c2=$!; sleep 0.5
+echo "  curl:        $(fetch http://203.0.113.1/)"
+echo "  dig udp:     $(dig +short +tries=1 +time=3 @203.0.113.1 stand.test)"
+echo "  dig tcp:     $(dig +short +tcp +tries=1 +time=3 @203.0.113.1 stand.test)"
+echo "  dig 1.1.1.1: $(dig +short +tries=1 +time=3 @1.1.1.1 . SOA | cut -d' ' -f1-2)"
+echo "  8 MB:        $(fetch http://203.0.113.1/big.bin)"
+sleep 1; kill $c1 $c2; wait $c1 $c2 2>/dev/null
+echo "  stand-cli: $(count stand-cli 'host 198.51.100.1 and tcp port 443') packets to/from 198.51.100.1:443, $(count stand-cli 'not (host 198.51.100.1 and tcp port 443)') other"
+echo "  stand-cli other: $(tcpdump -nr /tmp/cap-$sec-stand-cli.pcap 'not (host 198.51.100.1 and tcp port 443)' 2>/dev/null | awk '{print $3, $4, $5}' | sort | uniq -c | head -5 | tr '\n' ';')"
+echo "  $tun: $(count $tun 'host 198.51.100.1') packets to 198.51.100.1, $(count $tun 'udp port 53') DNS packets, $(count $tun 'host 203.0.113.1') to 203.0.113.1"
+pid=$(systemctl show -p MainPID --value $unit); sleep 2
+echo "  xray CPU after the checks: $(top -b -n 2 -d 1 -p "$pid" | awk '$1 == "'"$pid"'" {c = $9} END {print c}')%"
+
+sec=n
+echo "== without the /32 to the server"
+ip route del 198.51.100.1/32
+systemctl stop $unit; sleep 0.5; up
+tcpdump -Z root -nli stand-cli -w /tmp/cap-$sec-stand-cli.pcap 2>/dev/null & c1=$!
+tcpdump -Z root -nli $tun -w /tmp/cap-$sec-$tun.pcap 2>/dev/null & c2=$!; sleep 0.5
+echo "  curl: $(fetch http://203.0.113.1/)   dig: $(dig +short +tries=1 +time=3 @203.0.113.1 stand.test)"
+sleep 1; kill $c1 $c2; wait $c1 $c2 2>/dev/null
+echo "  stand-cli: $(count stand-cli 'host 198.51.100.1 and tcp port 443') to the server; $tun: $(count $tun 'host 198.51.100.1') to the server"
+ip route replace 198.51.100.1/32 via 192.0.2.1 dev stand-cli
+
+sec=r
+echo "== restart under load"
+ip monitor route > /tmp/mon-route.txt 2>&1 & m=$!
+tcpdump -Z root -nli stand-cli -w /tmp/cap-$sec-stand-cli.pcap 'host 203.0.113.1' 2>/dev/null & c1=$!; sleep 0.5
+( for i in $(seq 40); do printf '%s %s\n' "$(date +%T.%1N)" "$(fetch http://203.0.113.1/ -m 1)"; sleep 0.25; done ) > /tmp/loop.txt &
+loop=$!; sleep 2
+t0=$(date +%T.%1N); systemctl stop $unit; sleep 3; t1=$(date +%T.%1N); up; t2=$(date +%T.%1N)
+wait $loop; sleep 0.5; kill $c1 $m; wait $c1 2>/dev/null
+echo "  stop $t0, start $t1, attached $t2"
+echo "  address: $(ip -4 -br addr show $tun | awk '{print $3}'), default: $(ip -4 route show default | grep -c "dev $tun") via $tun"
+echo "  route events: $(grep -c . /tmp/mon-route.txt) ($(grep -c '^Deleted' /tmp/mon-route.txt) deletions)"
+echo "  direct to 203.0.113.1 on stand-cli: $(count stand-cli 'host 203.0.113.1') packets"
+echo "  curl loop: $(grep -c ' 200 ' /tmp/loop.txt) ok, $(grep -vc ' 200 ' /tmp/loop.txt) failed; failures from $(grep -v ' 200 ' /tmp/loop.txt | head -1 | cut -d' ' -f1) to $(grep -v ' 200 ' /tmp/loop.txt | tail -1 | cut -d' ' -f1)"
+echo "  after: $(fetch http://203.0.113.1/)"
+
+systemctl stop $unit
+ip route del default dev $tun 2>/dev/null; ip route del 198.51.100.1/32 2>/dev/null
+ip tuntap del dev $tun mode tun
+rm -f "$www/big.bin"
