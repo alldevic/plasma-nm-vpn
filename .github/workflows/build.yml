@@ -1,0 +1,29 @@
+name: build
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    # The editors must be built against forky's Qt: Qt rejects plugins built against a newer one.
+    container: debian:forky
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git build-essential cmake pkgconf \
+            libnm-dev libglib2.0-dev libjson-glib-dev \
+            qt6-base-dev extra-cmake-modules libkf6coreaddons-dev libkf6widgetsaddons-dev \
+            libkf6i18n-dev libkf6networkmanagerqt-dev plasma-nm
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - run: cmake --build build --parallel
+      - run: ctest --test-dir build --output-on-failure

@@ -1,0 +1,3 @@
+add_library(plasmanetworkmanagement_pnv_hysteria2ui MODULE hysteria2ui.cpp)
+target_link_libraries(plasmanetworkmanagement_pnv_hysteria2ui PRIVATE pnv-editor-deps)
+install(TARGETS plasmanetworkmanagement_pnv_hysteria2ui DESTINATION ${KDE_INSTALL_PLUGINDIR}/plasma/network/vpn)
