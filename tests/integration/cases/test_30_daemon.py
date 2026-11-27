@@ -36,7 +36,7 @@ def test_daemon_takes_its_bus_name(since, passwd):
     nmcli = up(name, "passwd-file", str(passwd))
     try:
         assert wait_for(lambda: f"{SERVICE}.Connection_" in sh("busctl --system list --no-pager", check=False))
-        assert "Connect: hysteria2" in journal(since)
+        assert wait_for(lambda: "Connect: hysteria2" in journal(since), timeout=10)
     finally:
         sh(f"nmcli connection down {name}", check=False)
         nmcli.wait(timeout=90)
