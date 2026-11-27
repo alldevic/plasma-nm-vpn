@@ -27,6 +27,7 @@ pkg_check_modules(JSONGLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 add_subdirectory(common/profile)
 add_subdirectory(common/daemon)
 add_subdirectory(common/auth-dialog)
+add_subdirectory(common/guard)
 add_subdirectory(backends/sb/daemon)
 
 if(BUILD_EDITORS)

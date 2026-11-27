@@ -1,6 +1,7 @@
 #!/bin/bash
 # install-daemon [--test-hooks]: build the daemons from the source tree (no editors) and install them with
-# their .name files and D-Bus policies, as the packages do. Run as root in the test VM.
+# their .name files, D-Bus policies, the guard tool, the core user, /run/plasma-nm-vpn and the cores (from
+# /opt/pnv-proto/bin, put there by prepare), as the packages do. Run as root in the test VM.
 set -euo pipefail
 
 root=$(readlink -f "$(dirname "$0")/../../..")
@@ -12,4 +13,10 @@ trap 'rm -rf "$build"' EXIT
 cmake -S "$root" -B "$build" -DBUILD_EDITORS=OFF -DBUILD_TESTING=OFF -DPNV_TEST_HOOKS=$hooks -DCMAKE_INSTALL_PREFIX=/usr >/dev/null
 cmake --build "$build" >/dev/null
 cmake --install "$build" >/dev/null
+systemd-sysusers - < "$root/debian/plasma-nm-vpn-common.sysusers"
+systemd-tmpfiles --create - < "$root/debian/plasma-nm-vpn-common.tmpfiles"
+install -d /usr/lib/plasma-nm-vpn/bin
+for core in /opt/pnv-proto/bin/*; do
+  [ -e "/usr/lib/plasma-nm-vpn/bin/${core##*/}" ] || ln -s "$core" /usr/lib/plasma-nm-vpn/bin/
+done
 systemctl reload dbus

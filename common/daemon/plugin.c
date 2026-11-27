@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #include <string.h>
 
-#include "pnv-daemon.h"
+#include "session.h"
 
 typedef struct {
     NMVpnServicePlugin parent;
@@ -18,14 +18,6 @@ typedef struct {
     PnvCleanup step;
 } CleanupStep;
 
-struct PnvSession {
-    NMVpnServicePlugin *plugin;
-    NMConnection *connection;
-    const PnvProtocol *protocol;
-    PnvProfile *profile;
-    GPtrArray *cleanups;
-};
-
 static const PnvProtocol *const *protocols;
 static PnvSession session;
 
@@ -41,7 +33,7 @@ NMConnection *pnv_session_connection(PnvSession *s)
 
 const char *pnv_session_uuid(PnvSession *s)
 {
-    return s->connection ? nm_connection_get_uuid(s->connection) : "-";
+    return s->uuid ? s->uuid : s->connection ? nm_connection_get_uuid(s->connection) : "-";
 }
 
 const PnvProfile *pnv_session_profile(PnvSession *s)
@@ -117,13 +109,17 @@ static void test_slow_cleanup(PnvSession *s)
     pnv_message(s, "test hook: slow cleanup step done");
 }
 
-static void test_hooks(PnvSession *s)
+/* The test build's hooks, chosen by vpn.data pnv-test-hook; TRUE if the hook replaces the launch. */
+static gboolean test_hooks(PnvSession *s)
 {
-    const char *hook = nm_setting_vpn_get_data_item(nm_connection_get_setting_vpn(s->connection), "pnv-test-hook");
-
+    s->test_hook = g_strdup(nm_setting_vpn_get_data_item(nm_connection_get_setting_vpn(s->connection),
+                                                         "pnv-test-hook"));
     pnv_session_add_cleanup(s, "test hook: slow step", test_slow_cleanup);
-    if (g_strcmp0(hook, "give-up") == 0)
+    if (g_strcmp0(s->test_hook, "give-up") == 0) {
         g_idle_add(test_give_up, NULL);
+        return TRUE;
+    }
+    return FALSE;
 }
 #endif
 
@@ -172,24 +168,47 @@ static PnvProfile *parse_profile(PnvSession *s, GError **error)
     return profile;
 }
 
+/* After Connect has returned: the systemd and network steps block for seconds. */
+static gboolean launch(gpointer data)
+{
+    PnvSession *s = data;
+    g_autoptr(GError) error = NULL;
+
+    if (pnv_session_prepare(s, &error) && s->protocol->connect(s, &error))
+        pnv_session_send_config(s);
+    else
+        pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "%s", error->message);
+    return G_SOURCE_REMOVE;
+}
+
 static gboolean real_connect(NMVpnServicePlugin *plugin G_GNUC_UNUSED, NMConnection *connection, GError **error)
 {
     const PnvProtocol *protocol = find_protocol(connection, error);
+    const char *uuid = nm_connection_get_uuid(connection);
 
     if (!protocol) {
-        pnv_warning(NULL, "Connect refused for %s: %s", nm_connection_get_uuid(connection), (*error)->message);
+        pnv_warning(NULL, "Connect refused for %s: %s", uuid, (*error)->message);
+        return FALSE;
+    }
+    if (!pnv_uuid_valid(uuid)) {
+        g_set_error(error, NM_VPN_PLUGIN_ERROR, NM_VPN_PLUGIN_ERROR_BAD_ARGUMENTS,
+                    "the profile UUID is not in the canonical lowercase form");
+        pnv_warning(NULL, "Connect refused: %s", (*error)->message);
         return FALSE;
     }
     session.connection = g_object_ref(connection);
     session.protocol = protocol;
+    session.uuid = g_strdup(uuid);
     pnv_message(&session, "Connect: %s (%s)", protocol->name, nm_connection_get_id(connection));
     session.profile = parse_profile(&session, error);
     if (!session.profile)
         return FALSE;
 #ifdef PNV_TEST_HOOKS
-    test_hooks(&session);
+    if (test_hooks(&session))
+        return TRUE;
 #endif
-    return protocol->connect(&session, error);
+    g_idle_add(launch, &session);
+    return TRUE;
 }
 
 static gboolean real_need_secrets(NMVpnServicePlugin *plugin G_GNUC_UNUSED, NMConnection *connection,

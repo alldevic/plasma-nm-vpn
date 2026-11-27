@@ -1,39 +1,12 @@
 # The daemon skeleton (2.1): bus name, secrets, unknown service types, giving up, synchronous disconnect.
 import subprocess
-import time
 
 import pytest
 
 from conftest import sh
+from helpers import PASSWORD, SERVICE, UNKNOWN, cursor, daemon_pid, journal, profile, up, wait_for
 
 pytestmark = pytest.mark.test_build
-
-SERVICE = "org.freedesktop.NetworkManager.pnv.hysteria2"
-UNKNOWN = "org.freedesktop.NetworkManager.pnv.test-unknown"
-PASSWORD = "s3cret-never-logged"
-
-
-def cursor():
-    return sh("journalctl -n 0 --show-cursor --no-pager").splitlines()[-1].removeprefix("-- cursor: ")
-
-
-def journal(after):
-    return sh(f"journalctl --after-cursor '{after}' --no-pager -o cat", timeout=30)
-
-
-def wait_for(predicate, timeout=20):
-    for _ in range(timeout * 4):
-        if predicate():
-            return True
-        time.sleep(0.25)
-    return False
-
-
-def profile(name, service=SERVICE, data="server=198.51.100.1, ports=443", flags=0):
-    sh(f"nmcli connection delete {name}", check=False)
-    sh(f"nmcli connection add type vpn con-name {name} autoconnect no vpn-type {service} "
-       f"vpn.data '{data}, password-flags={flags}'")
-    return name
 
 
 @pytest.fixture
@@ -56,16 +29,6 @@ def unknown_service():
        "> /usr/share/dbus-1/system.d/pnv-test-unknown.conf && systemctl reload dbus")
     yield
     sh("rm -f /usr/lib/NetworkManager/VPN/pnv-test-unknown.name /usr/share/dbus-1/system.d/pnv-test-unknown.conf")
-
-
-def up(name, *args):
-    """nmcli connection up in the background: the skeleton stays in STARTING until NM's timer."""
-    return subprocess.Popen(["nmcli", "connection", "up", name, *args], stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True)
-
-
-def daemon_pid():
-    return sh("pgrep -f '^/usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-sb' || true").split()
 
 
 def test_daemon_takes_its_bus_name(since, passwd):
