@@ -7,12 +7,12 @@ import time
 import pytest
 
 from conftest import DNS_MODE, sh
-from helpers import cursor, gone, journal, ok, tun, units, uuid_of, wait_for
+from helpers import cursor, gone, journal, keyfile, ok, tun, units, wait_for
 
 pytestmark = pytest.mark.test_build
 
 SECRETS = os.path.join(os.path.dirname(__file__), "..", "stand", "secrets", "env")
-BASE = "ports=443, obfs=salamander, tls-alpn=h3, tls-insecure=yes, password-flags=0, obfs-password-flags=0"
+BASE = {"ports": "443", "obfs": "salamander", "tls-alpn": "h3", "tls-insecure": "yes"}
 
 
 def bench_secrets():
@@ -20,14 +20,12 @@ def bench_secrets():
     return {k: v.strip().strip("'\"") for k, v in pairs}
 
 
-def hy2(name, server="srv.stand.test", data="", never_default=False):
+def hy2(name, server="srv.stand.test", data=None, never_default=False, dns="203.0.113.1", uuid=None, secrets=None):
+    """A Hysteria2 test profile for the bench as a .nmconnection; dns=None leaves dns empty."""
     s = bench_secrets()
-    sh(f"nmcli connection delete {name}", check=False)
-    extra = " ipv4.never-default yes" if never_default else ""
-    sh(f"nmcli connection add type vpn con-name {name} autoconnect no "
-       f"vpn-type org.freedesktop.NetworkManager.pnv.hysteria2 vpn.data 'server={server}, {BASE}{data}' "
-       f"vpn.secrets 'password={s['HY2_PASSWORD']}, obfs-password={s['HY2_OBFS']}'{extra}")
-    return uuid_of(name)
+    fields = {"server": server, **BASE, **({"dns": dns} if dns else {}), **(data or {})}
+    return keyfile(name, fields, {"password": s["HY2_PASSWORD"], "obfs-password": s["HY2_OBFS"], **(secrets or {})},
+                   never_default=never_default, uuid=uuid)
 
 
 def connect(name, wait=30):
@@ -77,7 +75,7 @@ def test_tun_route_and_cache(names):
 
 def test_default_dns(names):
     names.append("pnv-n-dns")
-    uuid = hy2("pnv-n-dns")
+    uuid = hy2("pnv-n-dns", dns=None)
     assert connect("pnv-n-dns").returncode == 0
     t = tun(uuid)
     assert sh(f"nmcli -g IP4.DNS device show {t}").strip() == "1.1.1.1 | 9.9.9.9"
@@ -91,14 +89,14 @@ def test_default_dns(names):
 
 def test_never_default(names):
     names += ["pnv-n-nd", "pnv-n-nd-dns"]
-    uuid = hy2("pnv-n-nd", never_default=True)
+    uuid = hy2("pnv-n-nd", never_default=True, dns=None)
     assert connect("pnv-n-nd").returncode == 0
     t = tun(uuid)
     assert f"dev {t}" not in sh("ip route show default")
     assert "dev stand-cli" in sh("ip route get 198.51.100.1")
     assert sh(f"nmcli -g IP4.DNS device show {t}").strip() == ""
     sh("nmcli connection down pnv-n-nd")
-    uuid2 = hy2("pnv-n-nd-dns", data=", dns=203.0.113.1", never_default=True)
+    uuid2 = hy2("pnv-n-nd-dns", never_default=True)
     assert connect("pnv-n-nd-dns").returncode == 0
     t2 = tun(uuid2)
     assert sh(f"nmcli -g IP4.DNS device show {t2}").strip() == "203.0.113.1"
@@ -127,7 +125,7 @@ def test_subnet_avoids_addresses_in_use(names):
 
 def test_failed_attempt_leaves_the_cache_alone(names):
     names.append("pnv-n-broken")
-    uuid = hy2("pnv-n-broken", data=", pnv-test-hook=broken-config")
+    uuid = hy2("pnv-n-broken", data={"pnv-test-hook": "broken-config"})
     sh(f"rm -f /var/lib/plasma-nm-vpn/{uuid}")
     assert connect("pnv-n-broken").returncode != 0
     assert not ok(f"test -e /var/lib/plasma-nm-vpn/{uuid}")
@@ -189,8 +187,7 @@ def hop_packets():
 
 def test_port_hopping(names):
     names.append("pnv-n-hop")
-    uuid = hy2("pnv-n-hop", server="198.51.100.1")
-    sh("nmcli connection modify pnv-n-hop +vpn.data 'ports=20000-20100, hop-interval=5'")
+    uuid = hy2("pnv-n-hop", server="198.51.100.1", data={"ports": "20000-20100", "hop-interval": "5"})
     before = hop_packets()
     assert connect("pnv-n-hop").returncode == 0
     assert outbound(uuid)["server_ports"] == ["20000:20100"] and "server_port" not in outbound(uuid)

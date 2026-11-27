@@ -1,4 +1,5 @@
 # Shared by the daemon cases: profiles, the journal, the units and resources of a profile.
+import os
 import subprocess
 import time
 
@@ -87,3 +88,51 @@ def core_pid(uuid):
 def gone(uuid):
     """Nothing of the profile's session is left: no unit (so no core process), TUN or run directory."""
     return not units(uuid) and not tun_exists(uuid) and not run_dir_exists(uuid)
+
+
+def keyfile(name, data, secrets=None, never_default=False, uuid=None):
+    """A test .nmconnection (0600) in system-connections, loaded with nmcli; returns its UUID."""
+    import uuid as uuidlib
+    sh(f"nmcli connection delete {name}", check=False)
+    uuid = uuid or str(uuidlib.uuid4())
+    lines = ["[connection]", f"id={name}", f"uuid={uuid}", "type=vpn", "autoconnect=false", "",
+             "[vpn]", f"service-type={SERVICE}", "persistent=true"]
+    lines += [f"{k}={v}" for k, v in data.items()]
+    lines += [f"{k}-flags=0" for k in (secrets or {})]
+    if secrets:
+        lines += ["", "[vpn-secrets]"] + [f"{k}={v}" for k, v in secrets.items()]
+    lines += ["", "[ipv4]", "method=auto"] + (["never-default=true"] if never_default else []) + [""]
+    path = f"/etc/NetworkManager/system-connections/{name}.nmconnection"
+    with open(path, "w") as f:
+        f.write("\n".join(lines))
+    os.chmod(path, 0o600)
+    sh(f"nmcli connection load {path}")
+    return uuid
+
+
+def no_traces(uuid, server_ips=("198.51.100.1", "2001:db8:100::1"), timeout=20):
+    """Nothing of the session is left (2.7). Waits for the daemon to exit first."""
+    def clean():
+        problems = []
+        if [p for p in scope_pids(uuid) if p in daemon_pid()] or daemon_pid():
+            problems.append("daemon process")
+        if sh("ip -br link show | grep -c '^pnv-' || true").strip() != "0":
+            problems.append("pnv-* interface")
+        routes = sh("ip route; ip -6 route")
+        if " dev pnv-" in routes:
+            problems.append("route via pnv-*")
+        for ip in server_ips:
+            if any(l.startswith(f"{ip} ") for l in routes.splitlines()):
+                problems.append(f"host route to {ip}")
+        table = sh("nft list table inet plasma_nm_vpn 2>/dev/null || true")
+        if uuid in table or f"test-{uuid[:8]}" in table:
+            problems.append("chains")
+        if sh("systemctl list-units --all --no-legend --plain 'plasma-nm-vpn-*' || true").strip():
+            problems.append("units")
+        if sh("pgrep -u plasma-nm-vpn || true").strip():
+            problems.append("plasma-nm-vpn processes")
+        if run_dir_exists(uuid):
+            problems.append("run directory")
+        return problems
+    wait_for(lambda: not clean(), timeout=timeout)
+    return clean()

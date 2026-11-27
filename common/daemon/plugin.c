@@ -168,16 +168,36 @@ static PnvProfile *parse_profile(PnvSession *s, GError **error)
     return profile;
 }
 
+#ifdef PNV_TEST_HOOKS
+/* hold-before-config: the core is up and supervised, but NM has no Ip4Config yet (2.7, kill -9 of the core). */
+static gboolean send_held_config(gpointer data)
+{
+    PnvSession *s = data;
+
+    if (s->core_watch)
+        pnv_session_send_config(s);
+    return G_SOURCE_REMOVE;
+}
+#endif
+
 /* After Connect has returned: the systemd and network steps block for seconds. */
 static gboolean launch(gpointer data)
 {
     PnvSession *s = data;
     g_autoptr(GError) error = NULL;
 
-    if (pnv_session_prepare(s, &error) && s->protocol->connect(s, &error))
-        pnv_session_send_config(s);
-    else
+    if (!pnv_session_prepare(s, &error) || !s->protocol->connect(s, &error)) {
         pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "%s", error->message);
+        return G_SOURCE_REMOVE;
+    }
+#ifdef PNV_TEST_HOOKS
+    if (g_strcmp0(s->test_hook, "hold-before-config") == 0) {
+        pnv_message(s, "test hook: holding Ip4Config for 20 s");
+        g_timeout_add_seconds(20, send_held_config, s);
+        return G_SOURCE_REMOVE;
+    }
+#endif
+    pnv_session_send_config(s);
     return G_SOURCE_REMOVE;
 }
 

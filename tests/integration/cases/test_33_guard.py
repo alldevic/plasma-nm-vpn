@@ -71,7 +71,7 @@ def test_dns_and_ipv6_are_rejected_not_dropped(default_tunnel):
         assert "203.0.113.1" in sh("resolvectl query -4 stand.test")
     else:
         first = [l.split()[1] for l in open("/etc/resolv.conf") if l.startswith("nameserver")][0]
-        assert first == "1.1.1.1"
+        assert first == "203.0.113.1"
 
 
 def test_neighbour_probes_to_global_addresses_pass(names):
@@ -134,7 +134,7 @@ def test_chains_go_with_the_session(names):
 
 def test_a_second_tunnel_is_not_blocked(default_tunnel, names):
     names.append("pnv-g-second")
-    second = hy2("pnv-g-second", data=", dns=203.0.113.1", never_default=True)
+    second = hy2("pnv-g-second", never_default=True)
     assert connect("pnv-g-second").returncode == 0
     assert not chains(second)
     assert f"dev {tun(second)}" in sh("ip route get 203.0.113.1")
@@ -144,7 +144,7 @@ def test_a_second_tunnel_is_not_blocked(default_tunnel, names):
 
 def test_never_default_has_no_guard(names):
     names.append("pnv-g-nd")
-    uuid = hy2("pnv-g-nd", never_default=True)
+    uuid = hy2("pnv-g-nd", never_default=True, dns=None)
     assert connect("pnv-g-nd").returncode == 0
     assert not chains(uuid)
     assert "198.51.100.1" in sh("dig +short +tries=1 +time=3 @192.0.2.1 srv.stand.test A")
