@@ -1,0 +1,40 @@
+{
+  "log" : {
+    "level" : "info",
+    "timestamp" : false
+  },
+  "inbounds" : [
+    {
+      "type" : "tun",
+      "tag" : "tun-in",
+      "interface_name" : "pnv-5ca1ab1e",
+      "address" : [
+        "198.18.0.1/30"
+      ],
+      "auto_route" : false,
+      "stack" : "system",
+      "mtu" : 1400
+    }
+  ],
+  "outbounds" : [
+    {
+      "type" : "hysteria2",
+      "tag" : "proxy",
+      "server" : "198.51.100.1",
+      "password" : "golden-password",
+      "tls" : {
+        "enabled" : true,
+        "server_name" : "srv.stand.test"
+      },
+      "server_ports" : [
+        "443:443",
+        "20000:20100"
+      ],
+      "hop_interval" : "10s",
+      "bind_interface" : "eth0"
+    }
+  ],
+  "route" : {
+    "final" : "proxy"
+  }
+}

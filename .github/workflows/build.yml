@@ -47,6 +47,8 @@ jobs:
           # Read-only token for the GitHub API (sing-box asset digest); anonymous requests are rate-limited.
           GITHUB_TOKEN: ${{ github.token }}
         run: scripts/fetch-cores cores-staging
+      - name: Golden configs pass the pinned core's check
+        run: scripts/check-golden cores-staging/bin/sing-box
       - name: Build packages
         run: |
           dpkg-buildpackage -b -us -uc

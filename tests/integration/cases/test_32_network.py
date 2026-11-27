@@ -1,4 +1,5 @@
 # Network parameters (2.4): the persistent TUN, its /30, the route to the server, DNS, the server IP cache.
+import json
 import os
 import subprocess
 import time
@@ -33,6 +34,10 @@ def connect(name, wait=30):
     return subprocess.run(["nmcli", "--wait", str(wait), "connection", "up", name], capture_output=True, text=True)
 
 
+def outbound(uuid):
+    return json.loads(sh(f"cat /run/plasma-nm-vpn/{uuid}/config.json"))["outbounds"][0]
+
+
 def subnet(uuid):
     out = sh(f"ip -4 -o addr show dev {tun(uuid)}").split()
     return out[out.index("inet") + 1]
@@ -60,8 +65,8 @@ def test_tun_route_and_cache(names):
     assert "UP" in sh(f"ip -br link show {t}")
     route = sh("ip route get 198.51.100.1")
     assert "dev stand-cli" in route and t not in route
-    assert '"server":"198.51.100.1"' in sh(f"cat /run/plasma-nm-vpn/{uuid}/config.json")
-    assert '"bind_interface":"stand-cli"' in sh(f"cat /run/plasma-nm-vpn/{uuid}/config.json")
+    assert outbound(uuid)["server"] == "198.51.100.1"
+    assert outbound(uuid)["bind_interface"] == "stand-cli"
     assert wait_for(lambda: ok(f"test -f /var/lib/plasma-nm-vpn/{uuid}"), timeout=10)
     cache = sh(f"cat /var/lib/plasma-nm-vpn/{uuid}")
     assert "name=srv.stand.test" in cache and "ip=198.51.100.1" in cache
@@ -175,3 +180,19 @@ def test_cache_ages_by_modification_time():
     assert not ok("test -e /var/lib/plasma-nm-vpn/pnvtest-old")
     assert ok("test -e /var/lib/plasma-nm-vpn/pnvtest-new")
     sh("rm -f /var/lib/plasma-nm-vpn/pnvtest-new")
+
+
+def hop_packets():
+    out = sh("ip netns exec stand nft list chain inet stand hop")
+    return int(out.split("counter packets ")[1].split()[0])
+
+
+def test_port_hopping(names):
+    names.append("pnv-n-hop")
+    uuid = hy2("pnv-n-hop", server="198.51.100.1")
+    sh("nmcli connection modify pnv-n-hop +vpn.data 'ports=20000-20100, hop-interval=5'")
+    before = hop_packets()
+    assert connect("pnv-n-hop").returncode == 0
+    assert outbound(uuid)["server_ports"] == ["20000:20100"] and "server_port" not in outbound(uuid)
+    assert "pnv stand: internet" in sh("curl -s -m 5 http://stand.test/")
+    assert hop_packets() > before

@@ -177,6 +177,8 @@ AmneziaWG rules in the MVP:
 
 **Secrets** are stored the standard plasma-nm way (the `PasswordField` widget, `<key>-flags` flags in `vpn.data`): for each field you can choose “Store password for this user only (encrypted)” (the default when a keychain is available; since 6.7 plasma-nm stores them via QtKeychain in KWallet or Secret Service, and without a keychain `PasswordField` defaults to the next option), “Store password for all users (not encrypted)” (in the profile file, root, 600) or “Ask for this password every time”; optional secrets (`obfs-password`, `preshared-key`, `awg-headerprotectionkey`) also offer “Not required” (`NotRequired`), so that an empty optional secret does not trigger a prompt. The daemon implements `need_secrets` for each protocol. The plasma-nm agent hands over stored secrets without loading the editor; the editor is needed only for an interactive prompt (“Ask for this password every time”, wrong password). Import puts the secrets from a link into `vpn.secrets`; export includes secrets only when explicitly chosen.
 
+**`tls-pin-sha256`** stays in the schema, so that a profile carrying it is recognised and refused with a clear reason. But the sing-box generator rejects any Hysteria2 profile that sets it (2.5): sing-box 1.14 can pin only a public key (`certificate_public_key_sha256`, reachable through `extra`), not the certificate hash that Hysteria2's `pinSHA256` means. The editor has no pin field (6.1), and import refuses a link with `pinSHA256` (6.6).
+
 **Validation** (2.2) is the library `common/profile` (GLib and json-glib only, so the editors and the import parsers link it too):
 - `pnv_profile_parse()` turns `vpn.data` + `vpn.secrets` into a typed `PnvProfile` or one `PnvProblem`, and the config generators read only the structure.
 - Unknown `vpn.data` keys (other than `<secret>-flags`, 0–7) and unknown `vpn.secrets` keys reject the profile, naming the key; compatibility with fields added later is what `schema` is for.
@@ -203,7 +205,7 @@ The “everything through the UI” requirement means structured forms, not a fi
 | Block                                       | Where needed                          |
 |---------------------------------------------|---------------------------------------|
 | Server, port                                | all                                   |
-| TLS (SNI, ALPN, insecure, pin; fingerprint only for protocols over TCP) | Hysteria2; in phase 2 TUIC, AnyTLS, ShadowTLS |
+| TLS (SNI, ALPN, insecure; fingerprint only for protocols over TCP; no pin field, see “Profile data schema”) | Hysteria2; in phase 2 TUIC, AnyTLS, ShadowTLS |
 | Reality (SNI, pbk, sid, spx, fp)            | VLESS (lives in the VLESS editor)     |
 | XHTTP transport (mode, path, host, extra)   | VLESS (lives in the VLESS editor)     |
 | Obfuscation (Salamander), port hopping      | Hysteria2                             |
@@ -219,7 +221,7 @@ Import is built into our editor: the “Paste link or config” field and the �
 
 MVP formats:
 
-- `hysteria2://` and `hy2://` per the [official Hysteria2 URI scheme](https://v2.hysteria.network/docs/developers/URI-Scheme/): `auth@host:ports` with multiple ports (`443,5000-6000`), `obfs`, `obfs-password`, `sni`, `insecure`, `pinSHA256`. The `gecko` obfuscation, the `ech` parameter and the `hysteria2+realm://` variant are not supported in the MVP: import reports this. If milestone 2.5 finds that sing-box has no equivalent of `pinSHA256`, a link with it is rejected the same way rather than imported without the pin;
+- `hysteria2://` and `hy2://` per the [official Hysteria2 URI scheme](https://v2.hysteria.network/docs/developers/URI-Scheme/): `auth@host:ports` with multiple ports (`443,5000-6000`), `obfs`, `obfs-password`, `sni`, `insecure`, `pinSHA256`. The `gecko` obfuscation, the `ech` parameter and the `hysteria2+realm://` variant are not supported in the MVP: import reports this. sing-box has no equivalent of `pinSHA256` (2.5: sing-box 1.14 has only `certificate_public_key_sha256`, a pin of the public key, while `pinSHA256` hashes the certificate), so a link with it is rejected the same way rather than imported without the pin;
 - `vless://` per the XTLS link standard ([Xray-core #716](https://github.com/XTLS/Xray-core/discussions/716)): `type=xhttp`, `security=reality`, `encryption`, `pbk`, `sid`, `spx`, `fp`, `sni`, `path`, `host`, `mode`, `extra`. `allowInsecure` has been removed from Xray-core, and the standard has `pcs` and `vcn` instead; they are not needed for Reality;
 - AmneziaWG `.conf` (awg-quick format, including files from AmneziaVPN).
 

@@ -1,0 +1,17 @@
+# Keys of the hysteria2 outbound that a profile's extra may set, sing-box 1.14.x (design.md, "Validation").
+# Not here: what the generator sets (server, ports, password, up/down_mbps, obfs, tls.server_name, tls.alpn,
+# tls.insecure, bind_interface), file paths, detour, and anything outside the outbound.
+network
+connect_timeout
+udp_fragment
+tls
+tls.disable_sni
+tls.min_version
+tls.max_version
+tls.cipher_suites
+tls.curve_preferences
+tls.certificate
+tls.certificate_public_key_sha256
+tls.fragment
+tls.fragment_fallback_delay
+tls.record_fragment

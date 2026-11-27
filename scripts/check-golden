@@ -1,0 +1,14 @@
+#!/bin/bash
+# check-golden <sing-box>: every golden config for that sing-box version passes `sing-box check`.
+set -euo pipefail
+. "$(dirname "$(readlink -f "$0")")/cores.sh"
+
+bin=$1
+version=$("$bin" version | sed -n 's/^sing-box version //p')
+[ "$version" = "$(pin sb VERSION)" ] || die "$bin is sing-box $version, cores/sb.env pins $(pin sb VERSION)"
+dir=$root/tests/golden/sing-box-$version
+[ -d "$dir" ] || die "no golden files for sing-box $version"
+for f in "$dir"/*.json; do
+  "$bin" check -c "$f" || die "sing-box check failed for ${f#"$root"/}"
+done
+echo "sing-box $version: $(ls "$dir"/*.json | wc -l) golden configs pass sing-box check"

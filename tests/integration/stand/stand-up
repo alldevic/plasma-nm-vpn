@@ -193,6 +193,11 @@ table inet stand {
     iifname "stand-srv" ip daddr { 203.0.113.0/24, 1.1.1.1 } drop
     iifname "stand-srv" ip6 daddr 2001:db8:113::/48 drop
   }
+  # Port hopping: a UDP range on the server address leads to the hysteria2 port; the counter shows its use.
+  chain hop {
+    type nat hook prerouting priority dstnat;
+    iifname "stand-srv" ip daddr 198.51.100.1 udp dport 20000-20100 counter dnat ip to 198.51.100.1:443
+  }
 }
 EOF
   mkdir -p /etc/netns/stand

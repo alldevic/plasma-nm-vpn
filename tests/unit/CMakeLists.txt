@@ -9,3 +9,8 @@ add_test(NAME profile COMMAND test-profile)
 add_executable(test-server test_server.c)
 target_link_libraries(test-server PRIVATE pnv-daemon)
 add_test(NAME server COMMAND test-server)
+
+add_executable(test-sb-config test_sb_config.c)
+target_link_libraries(test-sb-config PRIVATE pnv-sb-config)
+add_test(NAME sb-config COMMAND test-sb-config ${PROJECT_SOURCE_DIR}/backends/sb/data/hysteria2.json
+         ${PROJECT_SOURCE_DIR}/backends/sb/data/hysteria2-extra.list ${PROJECT_SOURCE_DIR}/tests/golden/sing-box-1.14.5)

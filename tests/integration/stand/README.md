@@ -19,6 +19,8 @@ sudo ./stand-down
 | "internet": HTTP :80, DNS :53 | netns `stand`, dummy `inet0` | 203.0.113.1, 2001:db8:113::1; DNS also 1.1.1.1 |
 | AmneziaWG tunnel | server / client `-4` / client `-6` | 100.64.0.1/24 / 100.64.0.2 / 100.64.0.3 |
 
+Port hopping: UDP 20000–20100 on 198.51.100.1 is DNATed to the hysteria2 port 443 (netns `stand`, `table inet stand`, chain `hop`, with a counter).
+
 The "internet" is reachable only through a tunnel: nftables in the netns drops traffic to it arriving on `stand-srv`, so direct traffic there is a leak. Capture leaks on `stand-cli`.
 
 The management connection (the VM's NIC) is the one deliberate exception to these addresses: `stand-up` keeps its address but sets `ipv4.never-default`, `ipv4.ignore-auto-dns` and `ipv6.method disabled`; `stand-down` restores the saved values. `stand-cli` is managed via `/etc/NetworkManager/conf.d/90-pnv-stand.conf` (veth is unmanaged by default), so it survives an NM restart.

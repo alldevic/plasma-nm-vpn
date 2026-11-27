@@ -1,0 +1,31 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": false
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "",
+      "address": [],
+      "auto_route": false,
+      "stack": "system"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "proxy",
+      "server": "",
+      "password": "",
+      "tls": {
+        "enabled": true,
+        "server_name": ""
+      }
+    }
+  ],
+  "route": {
+    "final": "proxy"
+  }
+}
