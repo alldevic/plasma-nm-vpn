@@ -1,0 +1,7 @@
+#!/bin/bash
+# mirror-to-test [<ref>...]: push the current branch, and any given refs (for example refs/tags/v0.1.0),
+# to the test repository, so that release rehearsals run exactly the code and workflows under review.
+set -euo pipefail
+remote=${PNV_TEST_REMOTE:-git@github.com:alldevic/plasma-nm-vpn-test.git}
+branch=$(git symbolic-ref --short HEAD)
+git push --force "$remote" "HEAD:refs/heads/$branch" "$@"

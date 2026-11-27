@@ -1,0 +1,26 @@
+#!/bin/bash
+# make-sources <outdir>: source archives of the GPL cores in the packages, published with each release:
+# sing-box with its Go dependencies vendored, and amneziawg-tools. The same pins give the same archives.
+set -euo pipefail
+. "$(dirname "$(readlink -f "$0")")/cores.sh"
+
+out=$(readlink -f "${1:?usage: make-sources <outdir>}")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+mkdir -p "$out"
+cd "$work"
+
+archive() { # archive DIR: DIR.tar.xz in <outdir>, reproducibly
+  tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --exclude=.git -cf - "$1" |
+    xz -9 -T1 > "$out/$1.tar.xz"
+  echo "$1.tar.xz"
+}
+
+dir=sing-box-$(pin sb VERSION)-source
+clone sb "$dir"
+(cd "$dir" && go mod vendor)
+archive "$dir"
+
+dir=amneziawg-tools-$(pin amneziawg-tools VERSION)-source
+clone amneziawg-tools "$dir"
+archive "$dir"

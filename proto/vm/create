@@ -28,7 +28,7 @@ cloud-localds seed.iso user-data
 
 # S3 enabled: QEMU wakes a guest on the RTC alarm only from S3, not from s2idle.
 virt-install --connect "$uri" --name "$name" \
-  --memory 6144 --vcpus 4 --cpu host-passthrough --osinfo debiantesting \
+  --memory memory=4096,maxmemory=4096 --vcpus 4 --cpu host-passthrough --osinfo debiantesting \
   --import --disk "$name.qcow2,bus=virtio" --disk seed.iso,device=cdrom \
   --network passt,portForward0.proto=tcp,portForward0.address=127.0.0.1,portForward0.range0.start=2222,portForward0.range0.to=22 \
   --pm suspend_to_mem.enabled=on \

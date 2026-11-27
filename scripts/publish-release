@@ -1,0 +1,28 @@
+#!/bin/bash
+# publish-release <owner/repo> <tag> <dir>: upload every file of <dir> to a draft release, check the draft
+# and only then publish it. On any mismatch the draft stays unpublished and the script fails.
+# Needs gh with a token that may write releases, gpgv and dpkg-deb.
+set -euo pipefail
+. "$(dirname "$(readlink -f "$0")")/cores.sh"
+
+repo=$1 tag=$2 dir=$(readlink -f "$3")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+gh release create "$tag" --repo "$repo" --draft --verify-tag --title "$tag" \
+  --notes "Install plasma-nm-vpn-archive-keyring from this page, then \`apt install plasma-nm-vpn\`; see the README." \
+  "$dir"/*
+
+(cd "$dir" && ls) | sort > "$work/want"
+gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' | sort > "$work/got"
+diff -u "$work/want" "$work/got" || die "draft $tag: asset names differ from the files"
+sed -n 's/^Filename: //p' "$dir/Packages" | sort | comm -23 - "$work/got" | grep . && die "draft $tag: Packages names missing assets"
+
+# The InRelease as uploaded must verify with the key users get from plasma-nm-vpn-archive-keyring (0.9).
+gh release download "$tag" --repo "$repo" -p InRelease -D "$work"
+dpkg-deb --fsys-tarfile "$dir"/plasma-nm-vpn-archive-keyring_*_all.deb |
+  tar -xO ./usr/share/keyrings/plasma-nm-vpn-archive-keyring.gpg > "$work/keyring.gpg"
+gpgv --keyring "$work/keyring.gpg" "$work/InRelease" || die "draft $tag: InRelease does not verify with the shipped keyring"
+
+gh release edit "$tag" --repo "$repo" --draft=false
+echo "published $tag"

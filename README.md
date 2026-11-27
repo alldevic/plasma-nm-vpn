@@ -5,6 +5,25 @@ Hysteria2, VLESS XHTTP Reality and AmneziaWG, with a kill switch. Target: Debian
 
 **Status: in development.** Nothing is ready for use yet. The design and the plan are in [`docs/`](docs/).
 
+## Installation
+
+Not released yet. Once it is: download `plasma-nm-vpn-archive-keyring` from the
+[latest release](https://github.com/alldevic/plasma-nm-vpn/releases/latest), then
+
+```
+sudo apt install ./plasma-nm-vpn-archive-keyring_*_all.deb
+sudo apt update
+sudo apt install plasma-nm-vpn
+```
+
+The apt repository lives in the release assets. For about two minutes after a new release, `apt update` may fail once
+with “Hash Sum mismatch” (GitHub caches its redirects); run it again. If `apt update` keeps reporting a signature
+error for this repository, remove the stale partial file and retry:
+
+```
+sudo rm /var/lib/apt/lists/partial/*plasma-nm-vpn*
+```
+
 ## Build
 
 Build dependencies on forky: `build-essential cmake pkgconf libnm-dev libglib2.0-dev libjson-glib-dev`

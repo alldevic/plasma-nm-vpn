@@ -1,0 +1,117 @@
+name: release
+
+# A v* tag: build the packages, attest them, sign the apt index (the only job with the key, after manual
+# approval in the Environment "release"), publish the GitHub release. See docs/design.md, "Distribution".
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: debian:forky
+    permissions:
+      contents: read
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git curl unzip python3 make gcc golang-go \
+            xz-utils dpkg-dev debhelper
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the tag
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/check-tag "$GITHUB_REF_NAME"
+      - name: Install build dependencies
+        run: apt-get build-dep -y --no-install-recommends ./
+      - name: Fetch cores
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: scripts/fetch-cores cores-staging
+      - name: Build packages
+        run: |
+          dpkg-buildpackage -b -us -uc
+          mkdir out && mv ../*.deb out/
+      - name: GPL core sources
+        run: scripts/make-sources out
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build
+          path: out/
+
+  attest:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build
+          path: out
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/*.deb
+
+  sign:
+    needs: attest
+    runs-on: ubuntu-24.04
+    container: debian:forky
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl python3 xz-utils dpkg-dev apt-utils gnupg gpgv
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build
+          path: out
+      - name: Index and sign
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export GNUPGHOME=$(mktemp -d)
+          printf '%s\n' "$SIGNING_KEY" | gpg --batch --quiet --import
+          scripts/make-index "$GITHUB_REPOSITORY" out release
+          rm -rf "$GNUPGHOME"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: release/
+
+  publish:
+    needs: sign
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/publish-release "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" release

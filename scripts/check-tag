@@ -1,0 +1,27 @@
+#!/bin/bash
+# check-tag <tag>: is this a release tag the pipeline may build?
+#   v<project version>              on master or a release branch;
+#   v<project version>-<core><ver>  (a core-only release, e.g. v0.1.0-sb1.14.5) on a release branch only.
+# The project version must match debian/changelog, the core version cores/<core>.env.
+# Run in a checkout with the remote branches fetched.
+set -euo pipefail
+. "$(dirname "$(readlink -f "$0")")/cores.sh"
+
+tag=${1:?usage: check-tag <tag>}
+version=$(dpkg-parsechangelog -l "$root/debian/changelog" -S Version)
+branches='^origin/(master|release/[^ ]+)$'
+
+if [[ $tag =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+  base=${BASH_REMATCH[1]}
+elif [[ $tag =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-(sb|xray|awg)([0-9][0-9.]*)$ ]]; then
+  base=${BASH_REMATCH[1]} core=${BASH_REMATCH[2]} corever=${BASH_REMATCH[3]}
+  pinned=$(pin "$([ "$core" = awg ] && echo amneziawg-go || echo "$core")" VERSION)
+  [ "$corever" = "$pinned" ] || die "$tag: cores/ pins $core $pinned"
+  branches='^origin/release/[^ ]+$'
+else
+  die "$tag is not a release tag"
+fi
+[ "$base" = "$version" ] || die "$tag: debian/changelog is at $version"
+git -C "$root" branch -r --contains HEAD | sed 's/^ *//' | grep -Eq "$branches" ||
+  die "$tag is not on $([ -n "${core:-}" ] && echo "a release branch" || echo "master or a release branch")"
+echo "$tag: project $version${core:+, core-only release of $core $corever}"

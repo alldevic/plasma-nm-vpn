@@ -11,6 +11,8 @@ AWG_VERSION := $(DEB_VERSION)+awg$(call pin,amneziawg-go)
 QT_VERSION := $(shell dpkg-query -W -f='$${Version}' libqt6core6t64 | sed -E 's/^[0-9]+://; s/[+~-].*//')
 REPOSITORY ?= $(or $(GITHUB_REPOSITORY),alldevic/plasma-nm-vpn)
 KEYRING := plasma-nm-vpn-archive-keyring.gpg
+# The key of the repository the release is built for: the test repository has its own test key.
+KEYRING_SOURCE := data/keyring/$(notdir $(REPOSITORY)).gpg
 BIN := usr/lib/plasma-nm-vpn/bin
 
 %:
@@ -29,7 +31,7 @@ execute_after_dh_auto_install:
 	install -D -m 0644 $(CORES)/licenses/xray debian/plasma-nm-vpn-xray/usr/share/doc/plasma-nm-vpn-xray/LICENSE.xray
 	install -D -m 0644 $(CORES)/licenses/amneziawg-go debian/plasma-nm-vpn-amneziawg/usr/share/doc/plasma-nm-vpn-amneziawg/LICENSE.amneziawg-go
 	install -D -m 0644 $(CORES)/licenses/awg debian/plasma-nm-vpn-amneziawg/usr/share/doc/plasma-nm-vpn-amneziawg/COPYING.awg
-	install -D -m 0644 data/keyring/$(KEYRING) debian/plasma-nm-vpn-archive-keyring/usr/share/keyrings/$(KEYRING)
+	install -D -m 0644 $(KEYRING_SOURCE) debian/plasma-nm-vpn-archive-keyring/usr/share/keyrings/$(KEYRING)
 	install -d debian/plasma-nm-vpn-archive-keyring/etc/apt/sources.list.d
 	sed -e 's|@REPOSITORY@|$(REPOSITORY)|' -e 's|@KEYRING@|$(KEYRING)|' debian/plasma-nm-vpn.sources.in \
 		> debian/plasma-nm-vpn-archive-keyring/etc/apt/sources.list.d/plasma-nm-vpn.sources

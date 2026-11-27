@@ -5,15 +5,13 @@
 # Needs curl, unzip, git, make, a C compiler and Go. GITHUB_TOKEN, if set, is used for the GitHub API.
 set -euo pipefail
 
-root=$(dirname "$(readlink -f "$0")")/..
+. "$(dirname "$(readlink -f "$0")")/cores.sh"
 out=$(readlink -f "${1:?usage: fetch-cores <outdir>}")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$out/bin" "$out/licenses"
 cd "$work"
 
-die() { echo "fetch-cores: $*" >&2; exit 1; }
-pin() { (. "$root/cores/$1.env"; eval "echo \"\$$2\""); }
 sha() { sha256sum "$1" | cut -d' ' -f1; }
 
 download() { # download PIN: fetch the asset and check it against the pin
@@ -21,13 +19,6 @@ download() { # download PIN: fetch the asset and check it against the pin
   repo=$(pin "$1" REPO) version=$(pin "$1" VERSION) asset=$(pin "$1" ASSET) want=$(pin "$1" SHA256)
   curl -fsSL -o "$asset" "https://github.com/$repo/releases/download/v$version/$asset"
   [ "$(sha "$asset")" = "$want" ] || die "$asset: sha256 differs from cores/$1.env"
-}
-
-clone() { # clone PIN DIR: the tag, checked against the pinned commit
-  local repo tag commit
-  repo=$(pin "$1" REPO) tag=$(pin "$1" TAG) commit=$(pin "$1" COMMIT)
-  git clone -q -c advice.detachedHead=false --depth 1 --branch "$tag" "https://github.com/$repo.git" "$2"
-  [ "$(git -C "$2" rev-parse HEAD)" = "$commit" ] || die "$repo $tag is not commit $commit"
 }
 
 # sing-box: upstream publishes no checksum files; the GitHub API reports the asset digest.
