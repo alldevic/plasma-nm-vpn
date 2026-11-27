@@ -11,7 +11,7 @@ Revised 26 November 2026. Based on [design.md](design.md). Each milestone is des
 
 | Stage | Content | Milestones | Days |
 |------|------------|-----|------|
-| 0 | Test bench and prototypes: remove the remaining technical risks | 9 | 11.5 |
+| 0 | Test bench and prototypes: remove the remaining technical risks | 8 | 11 |
 | 1 | Infrastructure: repository, packages, release pipeline, CI | 5 | 9 |
 | 2 | Shared library and Hysteria2 via nmcli | 7 | 14 |
 | 3 | AmneziaWG via nmcli | 2 | 4 |
@@ -19,7 +19,7 @@ Revised 26 November 2026. Based on [design.md](design.md). Each milestone is des
 | 5 | Kill switch, inherited block, block status, liveness check, reconnection, network changes and sleep | 8 | 15 |
 | 6 | plasma-nm editors, kill switch banner, import and export | 9 | 16 |
 | 7 | MVP release | 3 | 5 |
-| **MVP** | | **45** | **≈ 78.5 days (≈ 15.5 weeks)** |
+| **MVP** | | **44** | **≈ 78 days (≈ 15.5 weeks)** |
 | 8 | Phase 2 | — | estimated after the MVP |
 
 ## Stage 0. Test bench and prototypes
@@ -28,7 +28,6 @@ The goal is to verify everything the design rests on before writing any product 
 
 | Milestone | Days | What gets done | Done when |
 |------|------|-------------|---------------|
-| [0.1 sing-box question](milestones/0.1-singbox-name-issue.md) | 0.5 | An issue in sing-box: does the name term in the license allow the package name `plasma-nm-vpn-sing-box` | The issue is created. We wait for the answer in parallel; it is needed by milestone 7.1 |
 | [0.2 Test VM](milestones/0.2-test-vm.md) | 1 | A VM with Debian forky and KDE Plasma 6 (libvirt/QEMU), a snapshot of the clean state | The VM reverts to the snapshot with a single command |
 | [0.3 Server bench](milestones/0.3-server-bench.md) | 2 | Scripts that bring up servers in a network namespace: hysteria2 on sing-box, VLESS XHTTP Reality on xray, AmneziaWG on amneziawg-go; veth to the “client” side | Each server is brought up and stopped by a script; a manually run client reaches it |
 | [0.4 Cores without root](milestones/0.4-cores-without-root.md) | 2 | sing-box, xray and amneziawg-go started via `systemd-run` as a user with `CAP_NET_ADMIN CAP_NET_RAW` in a sandbox; for amneziawg-go, `/run/amneziawg` via tmpfiles.d and `awg setconf` as root | All three cores attach to a daemon-created persistent TUN and pass traffic to the bench; a core restart keeps the interface and its routes |
@@ -113,7 +112,7 @@ The parsers from milestone 6.6 do not depend on the editors and can be written e
 
 | Milestone | Days | What gets done | Done when |
 |------|------|-------------|---------------|
-| [7.1 Documentation and translation](milestones/7.1-docs-translation.md) | 2 | The sing-box package name is settled first (permission from the 0.1 issue, otherwise a neutral name); README in English and Russian with installation instructions (including restarting the session after an upgrade and the “No internet after a VPN failure” section), core license information and the vendored LGPL headers, UI translation and `Name[ru]`/`Description[ru]` in the metadata | A person with no context installs the packages in a clean VM following the README (from the test repository) |
+| [7.1 Documentation and translation](milestones/7.1-docs-translation.md) | 2 | README in English and Russian with installation instructions (including restarting the session after an upgrade and the “No internet after a VPN failure” section), core license information and the vendored LGPL headers, UI translation and `Name[ru]`/`Description[ru]` in the metadata | A person with no context installs the packages in a clean VM following the README (from the test repository) |
 | [7.2 Acceptance](milestones/7.2-acceptance.md) | 2 | Running all MVP acceptance criteria from `design.md` on a clean VM installed from the test repository; Wi-Fi ↔ Ethernet switching on the hardware test machine (over ssh), if it is available; fixes | All criteria are met, except installation from the public repository, which is checked in 7.3 |
 | [7.3 Publication](milestones/7.3-publication.md) | 1 | Release 0.1.0 under the package names settled in 7.1 | The release is published, installation from the public repository works |
 

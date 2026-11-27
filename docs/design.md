@@ -54,7 +54,7 @@ There is one plugin per core, and all the shared work is moved into a library, s
 
 ```mermaid
 flowchart TB
-    UI["plasma-nm: profile editors (VpnUiPlugin) from the plasma-nm-vpn-amneziawg, plasma-nm-vpn-sing-box, plasma-nm-vpn-xray packages, built on shared widgets"]
+    UI["plasma-nm: profile editors (VpnUiPlugin) from the plasma-nm-vpn-amneziawg, plasma-nm-vpn-sb, plasma-nm-vpn-xray packages, built on shared widgets"]
     NM["NetworkManager: addresses, routes, DNS, route to the server"]
     subgraph common["daemons on the plasma-nm-vpn-common library: D-Bus, states, field validation, config generation, systemd units, nftables, network monitoring"]
         awg["plasma-nm-vpn-service-awg<br/>AmneziaWG"]
@@ -92,13 +92,13 @@ NM starts the daemon; the daemon validates the profile fields, generates the cor
 | `plasma-nm-vpn` | metapackage: installs all core packages, and in phase 2 the new ones too | all core packages (`plasma-nm-vpn-common` comes in through them) |
 | `plasma-nm-vpn-archive-keyring` | repository signing key and the source file `/etc/apt/sources.list.d/plasma-nm-vpn.sources` with `Signed-By` | — |
 | `plasma-nm-vpn-common` | shared daemon library; shared editor widgets (Qt/KF6, without plasma-nm's internal API); the `plasma-nm-vpn` user; nftables templates; `plasma-nm-vpn-guard` and its polkit action | `network-manager`, `nftables`, `pkexec` |
-| `plasma-nm-vpn-sing-box`, `plasma-nm-vpn-xray`, `plasma-nm-vpn-amneziawg` | core binary in `/usr/lib/plasma-nm-vpn/bin/`, daemon, `.name`, editors (`VpnUiPlugin`), config templates and key allowlists for this core version | `plasma-nm-vpn-common (= <project version>)` (the shared library is private); `plasma-nm (>= 4:6.0), plasma-nm (<< 4:7)` |
+| `plasma-nm-vpn-sb`, `plasma-nm-vpn-xray`, `plasma-nm-vpn-amneziawg` | core binary in `/usr/lib/plasma-nm-vpn/bin/`, daemon, `.name`, editors (`VpnUiPlugin`), config templates and key allowlists for this core version | `plasma-nm-vpn-common (= <project version>)` (the shared library is private); `plasma-nm (>= 4:6.0), plasma-nm (<< 4:7)` |
 
 The new packages add almost no system dependencies. nftables has priority `important` and is present in any Debian installation, and json-glib (for JSON generation in the daemons) is pulled in by `xdg-desktop-portal`, which is mandatory for KDE (verified on forky). `pkexec` is a small separate package split out of polkit; whether a stock forky KDE install already has it is checked in milestone 0.2.
 
 **Removal and upgrades.** On `remove` (not on `upgrade`), the `prerm` of a core package deactivates that package's active VPN connections and waits up to 20 s for their daemon scopes to go away (then warns and continues, so removal is never blocked), and the `prerm` of `plasma-nm-vpn-common` also removes all of our nftables chains and `guard-status`, so that removing the packages never leaves a block without a tool to clear it. An upgrade does not touch running connections: the run-directory markers and the `guard-status` format carry a version, and the new code reads the previous one. A core-only release (for example `0.1.0+sb1.14.5`) is built from the release branch of the current project version, not from `main`, so that it matches the published `plasma-nm-vpn-common`.
 
-One package, one core: the user installs `plasma-nm-vpn-sing-box` and gets the core, the daemon and the editors for all protocols that the package supports in its current version. The list of protocols is given in the package description. A core package's version is the project version plus a core suffix: `0.1.0+sb1.14.4`, `0.1.0+xray26.11.9`, `0.1.0+awg3.1.20261116` (based on the amneziawg-go tag; the `awg` version is given in the changelog). `plasma-nm-vpn-common`, the metapackage and `plasma-nm-vpn-archive-keyring` have just the project version. On purge, the system user `plasma-nm-vpn` is not removed, as is customary in Debian. Installation: download `plasma-nm-vpn-archive-keyring` from the GitHub release page, install it, then run `apt install plasma-nm-vpn` to get everything at once, or install individual core packages.
+One package, one core: the user installs `plasma-nm-vpn-sb` and gets the core, the daemon and the editors for all protocols that the package supports in its current version. The list of protocols is given in the package description. A core package's version is the project version plus a core suffix: `0.1.0+sb1.14.4`, `0.1.0+xray26.11.9`, `0.1.0+awg3.1.20261116` (based on the amneziawg-go tag; the `awg` version is given in the changelog). `plasma-nm-vpn-common`, the metapackage and `plasma-nm-vpn-archive-keyring` have just the project version. On purge, the system user `plasma-nm-vpn` is not removed, as is customary in Debian. Installation: download `plasma-nm-vpn-archive-keyring` from the GitHub release page, install it, then run `apt install plasma-nm-vpn` to get everything at once, or install individual core packages.
 
 - **plasma-nm compatibility:** the `VpnUiPlugin` API is internal (there are no headers in Debian, and `libplasmanm_editor.so` has no version in its SONAME), but it is stable in practice. The headers the plugin needs (`vpnuiplugin.h`, `settingwidget.h`, `passwordfield.h`) have not changed ABI even once from 6.0.0 to 6.8.3; the only change across the series was a clang-format reformatting. Therefore:
   - one editor build per release, installed directly into plasma-nm's plugin directory (`qt6/plugins/plasma/network/vpn/`);
@@ -118,10 +118,10 @@ One package, one core: the user installs `plasma-nm-vpn-sing-box` and gets the c
 
 ## Distribution and supply chain
 
-- **Repository:** a flat apt repository in the release assets of the latest GitHub release; there is no separate hosting. In each release, CI uploads all current packages (including unchanged ones), plus `Packages` and an `InRelease` signed with the project key. Source: `URIs: https://github.com/<owner>/plasma-nm-vpn/releases/latest/download/`, `Suites: ./`, no `Components`; apt follows GitHub's redirect to the file storage. Old versions are available only on the pages of previous releases; rolling back via apt is not possible. freelens, openvpn-auth-oauth2 and Jamulus are already distributed this way; apt on forky handles the redirect chain to `release-assets.githubusercontent.com` (the query string problem existed only in old apt, before 2.2). Rules:
+- **Repository:** a flat apt repository in the release assets of the latest GitHub release; there is no separate hosting. In each release, CI uploads all current packages (including unchanged ones), plus `Packages` and an `InRelease` signed with the project key. Source: `URIs: https://github.com/alldevic/plasma-nm-vpn/releases/latest/download/`, `Suites: ./`, no `Components`; apt follows GitHub's redirect to the file storage. Old versions are available only on the pages of previous releases; rolling back via apt is not possible. freelens, openvpn-auth-oauth2 and Jamulus are already distributed this way; apt on forky handles the redirect chain to `release-assets.githubusercontent.com` (the query string problem existed only in old apt, before 2.2). Rules:
   - a release is created as a draft, all files are uploaded to it, and only then is it published: otherwise clients would see an inconsistent index;
   - unchanged packages are not rebuilt but taken from the previous release, with their sha256 checked against the previous `Packages`: a package with the same version but different contents breaks apt clients;
-  - release rehearsals take place in a separate test repository (`<owner>/plasma-nm-vpn-test`) with a test key, because any published release of the main repository immediately becomes `latest`; this is why the URI in the `.sources` file of the `plasma-nm-vpn-archive-keyring` package is filled in at build time from the repository name;
+  - release rehearsals take place in a separate test repository (`alldevic/plasma-nm-vpn-test`) with a test key, because any published release of the main repository immediately becomes `latest`; this is why the URI in the `.sources` file of the `plasma-nm-vpn-archive-keyring` package is filled in at build time from the repository name;
   - GitHub renames assets with special characters (`~` certainly, `+` possibly), so `Filename:` in `Packages` is taken from the final asset names, and the file names avoid these characters;
   - `Acquire-By-Hash` is not enabled: release assets cannot contain directories; the index is published as `Packages` and `Packages.xz` (decided in milestone 0.9);
   - GitHub limits: files up to 2 GiB, up to 1000 assets per release; total size and traffic are unlimited.
@@ -133,7 +133,7 @@ One package, one core: the user installs `plasma-nm-vpn-sing-box` and gets the c
 
   | Core | License | What to do |
   |------|----------|-------------|
-  | sing-box | GPL-3.0-or-later with an additional term on use of the name | publish the sources; ask in a sing-box issue whether the term allows the package name `plasma-nm-vpn-sing-box`. If there is no permission or no answer by the start of milestone 7.1, the package ships under a neutral name without “sing-box” (chosen in 7.1, so that the README and acceptance already use it), and the core is mentioned only in the description and the license information. The core binary and the GPL source archive keep their upstream names, and the `+sb` version suffix stays: it is an abbreviation, not the name |
+  | sing-box | GPL-3.0-or-later with an additional term on use of the name | publish the sources; our package is named `plasma-nm-vpn-sb` and none of our identifiers contains “sing-box”; the core is named only in the package description and the license information (attribution the GPL requires, not a claim of association); the core binary and the GPL source archive keep their upstream names |
   | xray | MPL-2.0 | state the license and link to the sources |
   | amneziawg-go | MIT | state the license |
   | awg (amneziawg-tools) | GPL-2.0 | publish the sources |
@@ -375,10 +375,6 @@ The checks are carried out in a test VM, in CI or on a separate hardware test ma
 - [ ] Do sing-box, xray and amneziawg-go attach to an existing persistent TUN created by the daemon (milestones 0.4 and 0.6)? Otherwise the fallback from “Network changes and sleep” applies.
 - [ ] Is `/dev/vhost-vsock` available on standard GitHub runners (milestone 1.4)? Otherwise the `allow-lan=no` tests need another non-IP control channel to the VM (for example a virtio-serial console).
 - [ ] A flat repository in release assets on the project's test repository: apt update and install on forky, renaming of assets with `+` in the name.
-
-Before the first publication:
-
-- [ ] Ask in a sing-box issue whether the name term in its license allows the package name `plasma-nm-vpn-sing-box`.
 
 Decide before phase 2:
 
