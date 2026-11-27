@@ -7,7 +7,7 @@ import time
 import pytest
 
 from conftest import DNS_MODE, sh
-from helpers import cursor, gone, journal, keyfile, ok, tun, units, wait_for
+from helpers import cursor, gone, journal, keyfile, ok, tun, units, wait_for, ip4_dns
 
 pytestmark = pytest.mark.test_build
 
@@ -78,7 +78,7 @@ def test_default_dns(names):
     uuid = hy2("pnv-n-dns", dns=None)
     assert connect("pnv-n-dns").returncode == 0
     t = tun(uuid)
-    assert sh(f"nmcli -g IP4.DNS device show {t}").strip() == "1.1.1.1 | 9.9.9.9"
+    assert ip4_dns(t) == "1.1.1.1 | 9.9.9.9"
     if DNS_MODE == "resolved":
         status = sh(f"resolvectl status {t}")
         # NM 1.58 marks the link as the default DNS route instead of adding the ~. domain.
@@ -96,12 +96,12 @@ def test_never_default(names):
     t = tun(uuid)
     assert f"dev {t}" not in sh("ip route show default")
     assert "dev stand-cli" in sh("ip route get 198.51.100.1")
-    assert sh(f"nmcli -g IP4.DNS device show {t}").strip() == ""
+    assert ip4_dns(t) == ""
     sh("nmcli connection down pnv-n-nd")
     uuid2 = hy2("pnv-n-nd-dns", never_default=True)
     assert connect("pnv-n-nd-dns").returncode == 0
     t2 = tun(uuid2)
-    assert sh(f"nmcli -g IP4.DNS device show {t2}").strip() == "203.0.113.1"
+    assert ip4_dns(t2) == "203.0.113.1"
     assert f"dev {t2}" in sh("ip route get 203.0.113.1")
 
 
@@ -183,7 +183,9 @@ def test_ip_literal_needs_no_dns(names, quiet_ntp):
     assert connect("pnv-n-literal").returncode == 0
     time.sleep(1)
     cap.terminate()
-    assert [l for l in cap.communicate()[0].splitlines() if "?" in l] == []
+    # The only names the daemon could ask for are the bench's; other services query now and then.
+    queries = [l for l in cap.communicate()[0].splitlines() if "?" in l]
+    assert [q for q in queries if "stand.test" in q or "in-addr.arpa" in q or "ip6.arpa" in q] == []
 
 
 def test_cache_ages_by_modification_time():

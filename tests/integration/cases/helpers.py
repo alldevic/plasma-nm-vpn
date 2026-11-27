@@ -138,3 +138,9 @@ def no_traces(uuid, server_ips=("198.51.100.1", "2001:db8:100::1"), timeout=20):
         return problems
     wait_for(lambda: not clean(), timeout=timeout)
     return clean()
+
+
+def ip4_dns(tun_name):
+    """IP4.DNS of the tunnel device; NM may list the device a moment after the activation returns."""
+    wait_for(lambda: ok(f"nmcli -g GENERAL.DEVICE device show {tun_name}"), timeout=10)
+    return sh(f"nmcli -g IP4.DNS device show {tun_name}").strip()

@@ -5,7 +5,7 @@ import time
 import pytest
 
 from conftest import DNS_MODE, sh
-from helpers import core_pid, cursor, journal, no_traces, ok, scope_pids, daemon_pid, tun, units, wait_for
+from helpers import core_pid, cursor, journal, no_traces, ok, scope_pids, daemon_pid, tun, units, wait_for, ip4_dns
 from test_40_awg import awg, connect
 
 pytestmark = pytest.mark.test_build
@@ -18,7 +18,7 @@ def chains(uuid):
 
 
 def dns_of(uuid):
-    return sh(f"nmcli -g IP4.DNS device show {tun(uuid)}").strip()
+    return ip4_dns(tun(uuid))
 
 
 @pytest.fixture
