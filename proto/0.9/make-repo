@@ -1,0 +1,74 @@
+#!/bin/bash
+# make-repo <owner/repo> <outdir> <pnv-apt-test version> [<previous tag>]
+# Build the test packages and a signed flat apt index for the release assets of <owner/repo>.
+# With <previous tag>, packages whose name and version are already in that release's Packages are
+# taken from it instead (sha256 checked against its Packages, and Packages against its InRelease).
+# Signs with the default key of $GNUPGHOME; KEYRING is the public keyring that checks the previous release.
+set -euo pipefail
+
+repo=$1 out=$2 version=$3 prev=${4:-}
+here=$(dirname "$(readlink -f "$0")")
+keyring=${KEYRING:-$here/plasma-nm-vpn-test.gpg}
+name=${repo#*/}
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+rm -rf "$out"
+mkdir -p "$out" "$work/build" "$work/prev"
+
+# Asset names: GitHub turns "~" into "." and "+" is awkward in URLs, so both become "-".
+asset() { echo "$1" | tr '+~' '--'; }
+
+for spec in "pnv-apt-test $version" "pnv-apt-test-common 0.1.0" "pnv-apt-test-rc 0.1.0~rc1"; do
+  read -r pkg ver <<<"$spec"
+  mkdir -p "$work/build/$pkg/DEBIAN"
+  cat > "$work/build/$pkg/DEBIAN/control" <<EOF
+Package: $pkg
+Version: $ver
+Architecture: all
+Maintainer: plasma-nm-vpn test <noreply@invalid>
+Description: empty test package for the apt repository rehearsal
+EOF
+  dpkg-deb --root-owner-group --build "$work/build/$pkg" "$work/build/${pkg}_${ver}_all.deb" >/dev/null
+done
+
+if [ -n "$prev" ]; then
+  base=https://github.com/$repo/releases/download/$prev
+  curl -fsSL -o "$work/prev/InRelease" "$base/InRelease"
+  curl -fsSL -o "$work/prev/Packages" "$base/Packages"
+  gpgv --keyring "$keyring" "$work/prev/InRelease" 2>/dev/null || { echo "previous InRelease: bad signature" >&2; exit 1; }
+  want=$(awk '/^SHA256:/ {s = 1; next} /^[^ ]/ {s = 0} s && $3 == "Packages" {print $1}' "$work/prev/InRelease")
+  [ "$(sha256sum < "$work/prev/Packages" | cut -d' ' -f1)" = "$want" ] || { echo "previous Packages does not match its InRelease" >&2; exit 1; }
+fi
+
+for deb in "$work"/build/*.deb; do
+  pkg=$(dpkg-deb -f "$deb" Package) ver=$(dpkg-deb -f "$deb" Version)
+  file=$(asset "$(basename "$deb")")
+  if [ -n "$prev" ]; then
+    entry=$(awk -v p="Package: $pkg" -v v="Version: $ver" 'BEGIN {RS = ""; FS = "\n"}
+      {a = b = 0; for (i = 1; i <= NF; i++) {a = a || $i == p; b = b || $i == v}} a && b' "$work/prev/Packages")
+    if [ -n "$entry" ]; then
+      prevfile=$(sed -n 's/^Filename: //p' <<<"$entry") sum=$(sed -n 's/^SHA256: //p' <<<"$entry")
+      curl -fsSL -o "$out/$prevfile" "$base/$prevfile"
+      [ "$(sha256sum < "$out/$prevfile" | cut -d' ' -f1)" = "$sum" ] || { echo "$prevfile: sha256 mismatch" >&2; exit 1; }
+      echo "carried over $prevfile from $prev"
+      continue
+    fi
+  fi
+  cp "$deb" "$out/$file"
+  echo "built $file"
+done
+
+cd "$out"
+apt-ftparchive packages . 2>/dev/null | sed 's|^Filename: \./|Filename: |' > Packages
+xz -k Packages
+apt-ftparchive -o APT::FTPArchive::Release::Origin="$name" -o APT::FTPArchive::Release::Label="$name" \
+  release . > "$work/Release"
+gpg --batch --yes --clearsign -o InRelease "$work/Release"
+
+cat > "$name.sources" <<EOF
+Types: deb
+URIs: https://github.com/$repo/releases/latest/download/
+Suites: ./
+Signed-By: /usr/share/keyrings/$name.gpg
+EOF
