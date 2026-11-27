@@ -1,0 +1,3 @@
+# The sing-box release binary is shipped as published upstream.
+hardening-no-pie [usr/lib/plasma-nm-vpn/bin/sing-box]
+hardening-no-relro [usr/lib/plasma-nm-vpn/bin/sing-box]

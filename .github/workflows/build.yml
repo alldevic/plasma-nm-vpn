@@ -27,3 +27,33 @@ jobs:
       - run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
       - run: cmake --build build --parallel
       - run: ctest --test-dir build --output-on-failure
+
+  packages:
+    runs-on: ubuntu-24.04
+    container: debian:forky
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git curl unzip python3 make gcc golang-go \
+            dpkg-dev debhelper lintian
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: apt-get build-dep -y --no-install-recommends ./
+      - name: Fetch cores
+        env:
+          # Read-only token for the GitHub API (sing-box asset digest); anonymous requests are rate-limited.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: scripts/fetch-cores cores-staging
+      - name: Build packages
+        run: |
+          dpkg-buildpackage -b -us -uc
+          mkdir out && mv ../*.deb out/
+      - name: Lintian
+        run: lintian --fail-on none --tag-display-limit 0 out/*.deb
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: out/*.deb

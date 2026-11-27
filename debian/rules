@@ -1,0 +1,52 @@
+#!/usr/bin/make -f
+include /usr/share/dpkg/pkg-info.mk
+
+# The cores come from scripts/fetch-cores, run before the build (the build itself needs no network).
+CORES ?= $(CURDIR)/cores-staging
+pin = $(shell . cores/$(1).env && echo $$VERSION)
+# The core packages carry the core version; dpkg compares Qt by the upstream part.
+SB_VERSION := $(DEB_VERSION)+sb$(call pin,sb)
+XRAY_VERSION := $(DEB_VERSION)+xray$(call pin,xray)
+AWG_VERSION := $(DEB_VERSION)+awg$(call pin,amneziawg-go)
+QT_VERSION := $(shell dpkg-query -W -f='$${Version}' libqt6core6t64 | sed -E 's/^[0-9]+://; s/[+~-].*//')
+REPOSITORY ?= $(or $(GITHUB_REPOSITORY),alldevic/plasma-nm-vpn)
+KEYRING := plasma-nm-vpn-archive-keyring.gpg
+BIN := usr/lib/plasma-nm-vpn/bin
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DKDE_INSTALL_USE_QT_SYS_PATHS=ON
+
+execute_after_dh_auto_install:
+	test -x $(CORES)/bin/sing-box || { echo "no cores in $(CORES): run scripts/fetch-cores $(CORES)" >&2; exit 1; }
+	install -D -m 0755 $(CORES)/bin/sing-box debian/plasma-nm-vpn-sb/$(BIN)/sing-box
+	install -D -m 0755 $(CORES)/bin/xray debian/plasma-nm-vpn-xray/$(BIN)/xray
+	install -D -m 0755 $(CORES)/bin/amneziawg-go debian/plasma-nm-vpn-amneziawg/$(BIN)/amneziawg-go
+	install -D -m 0755 $(CORES)/bin/awg debian/plasma-nm-vpn-amneziawg/$(BIN)/awg
+	install -D -m 0644 $(CORES)/licenses/sing-box debian/plasma-nm-vpn-sb/usr/share/doc/plasma-nm-vpn-sb/LICENSE.sing-box
+	install -D -m 0644 $(CORES)/licenses/xray debian/plasma-nm-vpn-xray/usr/share/doc/plasma-nm-vpn-xray/LICENSE.xray
+	install -D -m 0644 $(CORES)/licenses/amneziawg-go debian/plasma-nm-vpn-amneziawg/usr/share/doc/plasma-nm-vpn-amneziawg/LICENSE.amneziawg-go
+	install -D -m 0644 $(CORES)/licenses/awg debian/plasma-nm-vpn-amneziawg/usr/share/doc/plasma-nm-vpn-amneziawg/COPYING.awg
+	install -D -m 0644 data/keyring/$(KEYRING) debian/plasma-nm-vpn-archive-keyring/usr/share/keyrings/$(KEYRING)
+	install -d debian/plasma-nm-vpn-archive-keyring/etc/apt/sources.list.d
+	sed -e 's|@REPOSITORY@|$(REPOSITORY)|' -e 's|@KEYRING@|$(KEYRING)|' debian/plasma-nm-vpn.sources.in \
+		> debian/plasma-nm-vpn-archive-keyring/etc/apt/sources.list.d/plasma-nm-vpn.sources
+
+# The upstream release binaries are shipped as published; the cores built here are stripped.
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym -X$(BIN)/sing-box -X$(BIN)/xray
+
+override_dh_dwz:
+	dh_dwz -X$(BIN)/
+
+# plasma-nm ships no shlibs file for libplasmanm_editor.so; its dependency is set by hand.
+override_dh_shlibdeps:
+	dh_shlibdeps -- --ignore-missing-info
+
+override_dh_gencontrol:
+	dh_gencontrol -pplasma-nm-vpn-sb -- -v$(SB_VERSION) -Vpnv:Version=$(DEB_VERSION) -Vqt:BuildVersion=$(QT_VERSION)
+	dh_gencontrol -pplasma-nm-vpn-xray -- -v$(XRAY_VERSION) -Vpnv:Version=$(DEB_VERSION)
+	dh_gencontrol -pplasma-nm-vpn-amneziawg -- -v$(AWG_VERSION) -Vpnv:Version=$(DEB_VERSION)
+	dh_gencontrol --remaining-packages -- -Vpnv:Version=$(DEB_VERSION)

@@ -1,1 +1,8 @@
 /build/
+/cores-staging/
+/obj-*/
+/debian/.debhelper/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/debian/plasma-nm-vpn*/

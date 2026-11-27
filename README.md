@@ -18,6 +18,16 @@ cmake -B build && cmake --build build && ctest --test-dir build
 Installing into `/usr` needs `-DCMAKE_INSTALL_PREFIX=/usr -DKDE_INSTALL_USE_QT_SYS_PATHS=ON`, so that
 the editors land in Qt's plugin directory.
 
+## Packages
+
+The cores are pinned in [`cores/`](cores/); `scripts/fetch-cores` downloads or builds them and checks every hash
+(it needs network access, Go, git, curl and unzip). Then the build itself runs offline:
+
+```
+scripts/fetch-cores cores-staging
+dpkg-buildpackage -b -us -uc
+```
+
 ## License
 
 MIT, see [`LICENSE`](LICENSE). The plasma-nm headers in [`third_party/plasma-nm/`](third_party/plasma-nm/)

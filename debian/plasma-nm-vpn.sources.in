@@ -1,0 +1,4 @@
+Types: deb
+URIs: https://github.com/@REPOSITORY@/releases/latest/download/
+Suites: ./
+Signed-By: /usr/share/keyrings/@KEYRING@

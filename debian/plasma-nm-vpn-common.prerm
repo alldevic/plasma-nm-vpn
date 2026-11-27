@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+# On remove (not on upgrade) leave no block behind without the tool that clears it.
+if [ "$1" = remove ]; then
+    if command -v nft >/dev/null 2>&1; then
+        nft delete table inet plasma_nm_vpn 2>/dev/null || true
+    fi
+    rm -f /run/plasma-nm-vpn/guard-status
+fi
+
+#DEBHELPER#

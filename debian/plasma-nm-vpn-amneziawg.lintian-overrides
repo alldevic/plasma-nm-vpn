@@ -1,0 +1,2 @@
+# amneziawg-go is a pure Go binary (CGO_ENABLED=0).
+statically-linked-binary [usr/lib/plasma-nm-vpn/bin/amneziawg-go]

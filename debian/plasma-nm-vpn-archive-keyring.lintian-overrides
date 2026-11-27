@@ -1,0 +1,2 @@
+# Installing the apt source for the project repository is the purpose of this package.
+package-installs-apt-sources [etc/apt/sources.list.d/plasma-nm-vpn.sources]

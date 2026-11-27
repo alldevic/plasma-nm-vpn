@@ -1,0 +1,2 @@
+# The Xray release binary is a static Go binary, shipped as published upstream.
+statically-linked-binary [usr/lib/plasma-nm-vpn/bin/xray]

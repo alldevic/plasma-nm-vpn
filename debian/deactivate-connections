@@ -1,0 +1,28 @@
+#!/bin/sh
+# deactivate-connections SERVICE_TYPE...: run by the core packages' prerm on remove.
+# Brings down the active VPN connections of these service types, so that their daemons clean up,
+# and waits up to 20 s for their daemon scopes to go away. Never fails: removal must not be blocked.
+command -v nmcli >/dev/null 2>&1 || exit 0
+down=
+for uuid in $(nmcli -t -f UUID,TYPE connection show --active 2>/dev/null | sed -n 's/:vpn$//p'); do
+    type=$(nmcli -g vpn.service-type connection show "$uuid" 2>/dev/null)
+    for service in "$@"; do
+        if [ "$type" = "$service" ]; then
+            nmcli connection down "$uuid" >/dev/null 2>&1 || true
+            down="$down $uuid"
+        fi
+    done
+done
+[ -n "$down" ] || exit 0
+i=0
+while [ $i -lt 40 ]; do
+    left=
+    for uuid in $down; do
+        systemctl is-active --quiet "plasma-nm-vpn-daemon-$uuid.scope" && left="$left $uuid"
+    done
+    [ -n "$left" ] || exit 0
+    sleep 0.5
+    i=$((i + 1))
+done
+echo "plasma-nm-vpn: still tearing down after 20 s:$left" >&2
+exit 0

@@ -1,0 +1,63 @@
+#!/bin/bash
+# fetch-cores <outdir>: put the pinned cores and their licenses into <outdir>/{bin,licenses}.
+# Upstream archives are checked against cores/*.env and against what upstream publishes;
+# cores built from source are checked against the pinned commit. Any mismatch fails.
+# Needs curl, unzip, git, make, a C compiler and Go. GITHUB_TOKEN, if set, is used for the GitHub API.
+set -euo pipefail
+
+root=$(dirname "$(readlink -f "$0")")/..
+out=$(readlink -f "${1:?usage: fetch-cores <outdir>}")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+mkdir -p "$out/bin" "$out/licenses"
+cd "$work"
+
+die() { echo "fetch-cores: $*" >&2; exit 1; }
+pin() { (. "$root/cores/$1.env"; eval "echo \"\$$2\""); }
+sha() { sha256sum "$1" | cut -d' ' -f1; }
+
+download() { # download PIN: fetch the asset and check it against the pin
+  local repo version asset want
+  repo=$(pin "$1" REPO) version=$(pin "$1" VERSION) asset=$(pin "$1" ASSET) want=$(pin "$1" SHA256)
+  curl -fsSL -o "$asset" "https://github.com/$repo/releases/download/v$version/$asset"
+  [ "$(sha "$asset")" = "$want" ] || die "$asset: sha256 differs from cores/$1.env"
+}
+
+clone() { # clone PIN DIR: the tag, checked against the pinned commit
+  local repo tag commit
+  repo=$(pin "$1" REPO) tag=$(pin "$1" TAG) commit=$(pin "$1" COMMIT)
+  git clone -q -c advice.detachedHead=false --depth 1 --branch "$tag" "https://github.com/$repo.git" "$2"
+  [ "$(git -C "$2" rev-parse HEAD)" = "$commit" ] || die "$repo $tag is not commit $commit"
+}
+
+# sing-box: upstream publishes no checksum files; the GitHub API reports the asset digest.
+download sb
+asset=$(pin sb ASSET)
+api=https://api.github.com/repos/$(pin sb REPO)/releases/tags/v$(pin sb VERSION)
+digest=$(curl -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} "$api" |
+  python3 -c 'import json, sys; print(next(a["digest"] for a in json.load(sys.stdin)["assets"] if a["name"] == sys.argv[1]))' "$asset")
+[ "$digest" = "sha256:$(pin sb SHA256)" ] || die "$asset: GitHub reports $digest"
+dir=${asset%.tar.gz}
+tar -xzf "$asset" "$dir/sing-box" "$dir/LICENSE"
+install -m 0755 "$dir/sing-box" "$out/bin/sing-box"
+install -m 0644 "$dir/LICENSE" "$out/licenses/sing-box"
+
+# xray: checked against the upstream .dgst file as well.
+download xray
+asset=$(pin xray ASSET)
+curl -fsSL -o "$asset.dgst" "https://github.com/$(pin xray REPO)/releases/download/v$(pin xray VERSION)/$asset.dgst"
+grep -qi "^SHA2-256= *$(pin xray SHA256)$" "$asset.dgst" || die "$asset: not in upstream $asset.dgst"
+unzip -q -o "$asset" xray LICENSE -d xray
+install -m 0755 xray/xray "$out/bin/xray"
+install -m 0644 xray/LICENSE "$out/licenses/xray"
+
+clone amneziawg-go amneziawg-go
+(cd amneziawg-go && CGO_ENABLED=0 go build -trimpath -ldflags=-buildid= -o "$out/bin/amneziawg-go" .)
+install -m 0644 amneziawg-go/LICENSE "$out/licenses/amneziawg-go"
+
+clone amneziawg-tools amneziawg-tools
+make -s -C amneziawg-tools/src wg
+install -m 0755 amneziawg-tools/src/wg "$out/bin/awg"
+install -m 0644 amneziawg-tools/COPYING "$out/licenses/awg"
+
+ls -l "$out/bin"

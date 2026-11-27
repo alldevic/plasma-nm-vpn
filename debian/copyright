@@ -1,0 +1,109 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: plasma-nm-vpn
+Source: https://github.com/alldevic/plasma-nm-vpn
+Comment: The core packages also ship third-party core binaries, which are not
+ part of this source package:
+  - plasma-nm-vpn-sb: /usr/lib/plasma-nm-vpn/bin/sing-box, sing-box 1.14.4 from
+    https://github.com/SagerNet/sing-box, unchanged release binary;
+    license GPL-3+ with the additional term below (License: GPL-3+-sing-box).
+  - plasma-nm-vpn-xray: /usr/lib/plasma-nm-vpn/bin/xray, Xray-core 26.11.9 from
+    https://github.com/XTLS/Xray-core, unchanged release binary; license MPL-2.0.
+  - plasma-nm-vpn-amneziawg: /usr/lib/plasma-nm-vpn/bin/amneziawg-go, built from
+    https://github.com/amnezia-vpn/amneziawg-go tag v3.1.20261116; license
+    Expat. /usr/lib/plasma-nm-vpn/bin/awg, built from
+    https://github.com/amnezia-vpn/amneziawg-tools tag v3.1.20260812; license
+    GPL-2.
+ The sources of the GPL cores, with their Go dependencies, are published next
+ to the packages in each release. The cores' own license files are installed in
+ /usr/share/doc/<package>/.
+
+Files: *
+Copyright: 2026 Nikolay Bely
+License: Expat
+
+Files: third_party/plasma-nm/vpnuiplugin.h
+Copyright: 2008 Will Stephenson <wstephenson@kde.org>
+           2013 Lukáš Tinkl <ltinkl@redhat.com>
+License: LGPL-2.1-only or LGPL-3.0-only or LicenseRef-KDE-Accepted-LGPL
+
+Files: third_party/plasma-nm/settingwidget.h
+Copyright: 2013 Jan Grulich <jgrulich@redhat.com>
+License: LGPL-2.1-only or LGPL-3.0-only or LicenseRef-KDE-Accepted-LGPL
+
+Files: third_party/plasma-nm/passwordfield.h
+Copyright: 2015 Jan Grulich <jgrulich@redhat.com>
+License: LGPL-2.1-only or LGPL-3.0-only or LicenseRef-KDE-Accepted-LGPL
+
+Files: third_party/plasma-nm/LICENSES/*
+Copyright: Free Software Foundation, Inc.
+           KDE e.V.
+License: verbatim
+ Everyone is permitted to copy and distribute verbatim copies of these
+ license documents, but changing them is not allowed.
+
+License: Expat
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+
+License: LGPL-2.1-only
+ On Debian systems, the full text of the GNU Lesser General Public License
+ version 2.1 can be found in /usr/share/common-licenses/LGPL-2.1.
+
+License: LGPL-3.0-only
+ On Debian systems, the full text of the GNU Lesser General Public License
+ version 3 can be found in /usr/share/common-licenses/LGPL-3, and the GNU
+ General Public License version 3 it builds on in
+ /usr/share/common-licenses/GPL-3.
+
+License: LicenseRef-KDE-Accepted-LGPL
+ This library is free software; you can redistribute it and/or modify it under
+ the terms of the GNU Lesser General Public License as published by the Free
+ Software Foundation; either version 3 of the license or (at your option) any
+ later version that is accepted by the membership of KDE e.V. (or its successor
+ approved by the membership of KDE e.V.), which shall act as a proxy as defined
+ in Section 6 of version 3 of the license.
+
+License: GPL-3+-sing-box
+ Copyright (C) 2022 by nekohasekai <contact-sagernet@sekai.icu>
+ .
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+ .
+ In addition, no derivative work may use the name or imply association
+ with this application without prior consent.
+ .
+ On Debian systems, the full text of the GNU General Public License version 3
+ can be found in /usr/share/common-licenses/GPL-3.
+
+License: MPL-2.0
+ On Debian systems, the full text of the Mozilla Public License 2.0 can be
+ found in /usr/share/common-licenses/MPL-2.0.
+
+License: GPL-2
+ On Debian systems, the full text of the GNU General Public License version 2
+ can be found in /usr/share/common-licenses/GPL-2.

@@ -1,0 +1,76 @@
+Source: plasma-nm-vpn
+Section: net
+Priority: optional
+Maintainer: Nikolay Bely <belyynikolay@gmail.com>
+Build-Depends: debhelper-compat (= 14),
+               cmake,
+               pkgconf,
+               libnm-dev,
+               libglib2.0-dev,
+               libjson-glib-dev,
+               qt6-base-dev,
+               extra-cmake-modules,
+               libkf6coreaddons-dev,
+               libkf6widgetsaddons-dev,
+               libkf6i18n-dev,
+               libkf6networkmanagerqt-dev,
+               plasma-nm
+Standards-Version: 4.7.2
+Homepage: https://github.com/alldevic/plasma-nm-vpn
+Rules-Requires-Root: no
+
+Package: plasma-nm-vpn
+Section: metapackages
+Architecture: amd64
+Depends: plasma-nm-vpn-sb (>= ${pnv:Version}),
+         plasma-nm-vpn-xray (>= ${pnv:Version}),
+         plasma-nm-vpn-amneziawg (>= ${pnv:Version}),
+         ${misc:Depends}
+Description: modern VPN protocols for NetworkManager and KDE Plasma (all cores)
+ Installs the plugins for all supported cores: Hysteria2, VLESS XHTTP Reality
+ and AmneziaWG, configured from the Plasma network settings.
+
+Package: plasma-nm-vpn-common
+Architecture: amd64
+Depends: network-manager, nftables, pkexec, ${shlibs:Depends}, ${misc:Depends}
+Description: modern VPN protocols for NetworkManager and KDE Plasma (shared files)
+ Shared parts of the plasma-nm-vpn plugins: the system user the cores run as
+ and the helpers used by the core packages.
+
+Package: plasma-nm-vpn-sb
+Architecture: amd64
+Depends: plasma-nm-vpn-common (= ${pnv:Version}),
+         plasma-nm (>= 4:6.0), plasma-nm (<< 4:7),
+         libqt6core6t64 (>= ${qt:BuildVersion}),
+         ${shlibs:Depends}, ${misc:Depends}
+Description: Hysteria2 VPN for NetworkManager and KDE Plasma
+ NetworkManager VPN plugin and Plasma editor for Hysteria2, using the
+ sing-box core (GPL-3.0-or-later; the core is shipped unchanged from its
+ upstream release). Supported protocols: Hysteria2.
+
+Package: plasma-nm-vpn-xray
+Architecture: amd64
+Depends: plasma-nm-vpn-common (= ${pnv:Version}),
+         plasma-nm (>= 4:6.0), plasma-nm (<< 4:7),
+         ${shlibs:Depends}, ${misc:Depends}
+Description: VLESS XHTTP Reality VPN for NetworkManager and KDE Plasma
+ NetworkManager VPN plugin for VLESS XHTTP Reality, using the Xray core
+ (MPL-2.0; shipped unchanged from its upstream release). Supported protocols:
+ VLESS XHTTP Reality.
+
+Package: plasma-nm-vpn-amneziawg
+Architecture: amd64
+Depends: plasma-nm-vpn-common (= ${pnv:Version}),
+         plasma-nm (>= 4:6.0), plasma-nm (<< 4:7),
+         ${shlibs:Depends}, ${misc:Depends}
+Description: AmneziaWG VPN for NetworkManager and KDE Plasma
+ NetworkManager VPN plugin for AmneziaWG 3.1, using the userspace
+ amneziawg-go (MIT) and awg from amneziawg-tools (GPL-2.0). Supported
+ protocols: AmneziaWG.
+
+Package: plasma-nm-vpn-archive-keyring
+Architecture: all
+Depends: ${misc:Depends}
+Description: plasma-nm-vpn repository signing key and apt source
+ The key that signs the plasma-nm-vpn apt repository in the GitHub releases,
+ and the apt source for it.
