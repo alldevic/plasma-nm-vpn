@@ -23,7 +23,7 @@ def fails_fast(cmd):
 
 
 def capture(expr):
-    return subprocess.Popen(["timeout", "30", "tcpdump", "-n", "-l", "-i", "stand-cli", expr],
+    return subprocess.Popen(["timeout", "30", "tcpdump", "-n", "-l", "-Q", "out", "-i", "stand-cli", expr],
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
 

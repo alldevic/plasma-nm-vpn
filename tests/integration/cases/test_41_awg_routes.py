@@ -51,7 +51,8 @@ def test_nothing_leaks(names):
     names.append("pnv-r-leak")
     awg("pnv-r-leak", allowed_ips="0.0.0.0/0")
     assert connect("pnv-r-leak").returncode == 0
-    cap = subprocess.Popen(["timeout", "30", "tcpdump", "-n", "-l", "-i", "stand-cli",
+    # Outgoing only: a late packet from an earlier session's server is not a leak.
+    cap = subprocess.Popen(["timeout", "30", "tcpdump", "-n", "-l", "-Q", "out", "-i", "stand-cli",
                             "(port 53 or port 853) or (ip6 and not dst net fe80::/10 and not dst net ff00::/8 "
                             "and not icmp6)"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     time.sleep(1)
