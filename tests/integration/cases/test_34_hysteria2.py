@@ -6,7 +6,7 @@ import time
 import pytest
 
 from conftest import sh
-from helpers import core_pid, cursor, journal, no_traces, ok, units, wait_for
+from helpers import core_pid, cursor, journal, no_traces, ok, units, wait_for, fetch
 from test_32_network import connect, hy2
 
 pytestmark = pytest.mark.test_build
@@ -31,7 +31,7 @@ def test_connection_and_traffic(names):
     assert connect("pnv-h-traffic").returncode == 0
     assert sh("nmcli -g GENERAL.STATE connection show pnv-h-traffic").strip() == "activated"
     assert wait_for(lambda: "stand.test" in sh("getent hosts stand.test", check=False), timeout=10)
-    assert "pnv stand: internet" in sh("curl -s -m 10 http://stand.test/")
+    assert "pnv stand: internet" in fetch("http://stand.test/")
     assert sh(f"ps -o user= -p {core_pid(uuid)}").strip() == "plasma-nm-vpn"
     sh("nmcli connection down pnv-h-traffic")
     assert no_traces(uuid) == []
@@ -98,4 +98,4 @@ def test_up_again_after_each_failure(names):
     assert no_traces(uuid) == []
     sh("nmcli connection modify pnv-h-again -vpn.data pnv-test-hook")
     assert connect("pnv-h-again").returncode == 0
-    assert "pnv stand: internet" in sh("curl -s -m 10 http://stand.test/")
+    assert "pnv stand: internet" in fetch("http://stand.test/")

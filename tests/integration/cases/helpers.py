@@ -144,3 +144,15 @@ def ip4_dns(tun_name):
     """IP4.DNS of the tunnel device; NM may list the device a moment after the activation returns."""
     wait_for(lambda: ok(f"nmcli -g GENERAL.DEVICE device show {tun_name}"), timeout=10)
     return sh(f"nmcli -g IP4.DNS device show {tun_name}").strip()
+
+
+def fetch(url, timeout=15):
+    """The page at url through the tunnel; retried, since resolved applies a new link's DNS a moment later."""
+    out = []
+
+    def get():
+        r = subprocess.run(["curl", "-s", "-m", "5", url], capture_output=True, text=True)
+        out[:] = [r.stdout]
+        return r.returncode == 0
+    wait_for(get, timeout=timeout)
+    return out[0] if out else ""

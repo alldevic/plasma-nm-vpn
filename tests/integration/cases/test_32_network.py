@@ -7,7 +7,7 @@ import time
 import pytest
 
 from conftest import DNS_MODE, sh
-from helpers import cursor, gone, journal, keyfile, ok, tun, units, wait_for, ip4_dns
+from helpers import cursor, gone, journal, keyfile, ok, tun, units, wait_for, ip4_dns, fetch
 
 pytestmark = pytest.mark.test_build
 
@@ -68,7 +68,7 @@ def test_tun_route_and_cache(names):
     assert wait_for(lambda: ok(f"test -f /var/lib/plasma-nm-vpn/{uuid}"), timeout=10)
     cache = sh(f"cat /var/lib/plasma-nm-vpn/{uuid}")
     assert "name=srv.stand.test" in cache and "ip=198.51.100.1" in cache
-    assert "pnv stand: internet" in sh("curl -s -m 5 http://stand.test/")
+    assert "pnv stand: internet" in fetch("http://stand.test/")
     sh("nmcli connection down pnv-n-basic")
     assert wait_for(lambda: gone(uuid), timeout=20)
 
@@ -208,5 +208,5 @@ def test_port_hopping(names):
     before = hop_packets()
     assert connect("pnv-n-hop").returncode == 0
     assert outbound(uuid)["server_ports"] == ["20000:20100"] and "server_port" not in outbound(uuid)
-    assert "pnv stand: internet" in sh("curl -s -m 5 http://stand.test/")
+    assert "pnv stand: internet" in fetch("http://stand.test/")
     assert hop_packets() > before

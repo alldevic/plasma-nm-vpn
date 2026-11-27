@@ -5,7 +5,7 @@ import time
 import pytest
 
 from conftest import DNS_MODE, sh
-from helpers import cursor, daemon_pid, gone, journal, ok, scope_pids, tun, wait_for
+from helpers import cursor, daemon_pid, gone, journal, ok, scope_pids, tun, wait_for, fetch
 from test_32_network import connect, hy2
 
 pytestmark = pytest.mark.test_build
@@ -54,7 +54,7 @@ def default_tunnel(names):
 def test_nothing_leaks_past_the_tunnel(default_tunnel):
     cap = capture("(port 53 or port 853) or (ip6 and not dst net fe80::/10 and not dst net ff00::/8 and not icmp6)")
     time.sleep(1)
-    assert "pnv stand: internet" in sh("curl -s -m 5 http://stand.test/")
+    assert "pnv stand: internet" in fetch("http://stand.test/")
     sh("getent hosts srv.stand.test")
     subprocess.run("dig +tries=1 +time=2 @192.0.2.1 srv.stand.test; ping -6 -c1 -W2 2001:db8:1::1", shell=True,
                    capture_output=True)
@@ -82,7 +82,7 @@ def test_neighbour_probes_to_global_addresses_pass(names):
     cap = capture("icmp6 and ip6[40] == 135 and ip6 dst 2001:db8:1::1")
     sh("ip -6 neigh change 2001:db8:1::1 dev stand-cli nud stale")
     time.sleep(1)
-    sh("curl -s -m 5 http://stand.test/")
+    fetch("http://stand.test/")
     assert wait_for(lambda: "REACHABLE" in sh("ip -6 neigh show 2001:db8:1::1 dev stand-cli"), timeout=15)
     assert "2001:db8:1::1" in captured(cap)
 
@@ -139,7 +139,7 @@ def test_a_second_tunnel_is_not_blocked(default_tunnel, names):
     assert not chains(second)
     assert f"dev {tun(second)}" in sh("ip route get 203.0.113.1")
     assert "203.0.113.1" in sh("dig +short +tries=1 +time=3 @203.0.113.1 stand.test A")
-    assert "pnv stand: internet" in sh("curl -s -m 5 http://203.0.113.1/")
+    assert "pnv stand: internet" in fetch("http://203.0.113.1/")
 
 
 def test_never_default_has_no_guard(names):

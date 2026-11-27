@@ -5,7 +5,7 @@ import time
 import pytest
 
 from conftest import DNS_MODE, sh
-from helpers import core_pid, cursor, journal, no_traces, ok, scope_pids, daemon_pid, tun, units, wait_for, ip4_dns
+from helpers import core_pid, cursor, journal, no_traces, ok, scope_pids, daemon_pid, tun, units, wait_for, ip4_dns, fetch
 from test_40_awg import awg, connect
 
 pytestmark = pytest.mark.test_build
@@ -44,7 +44,7 @@ def test_default_route_tunnel(names, allowed):
         status = sh(f"resolvectl status {t}")
         assert "1.1.1.1" in status and ("~." in status or "Default Route: yes" in status)
     assert chains(uuid)
-    assert "pnv stand: internet" in sh("curl -s -m 10 http://203.0.113.1/")
+    assert "pnv stand: internet" in fetch("http://203.0.113.1/")
 
 
 def test_nothing_leaks(names):
@@ -56,7 +56,7 @@ def test_nothing_leaks(names):
                             "(port 53 or port 853) or (ip6 and not dst net fe80::/10 and not dst net ff00::/8 "
                             "and not icmp6)"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     time.sleep(1)
-    assert "pnv stand: internet" in sh("curl -s -m 10 http://stand.test/")
+    assert "pnv stand: internet" in fetch("http://stand.test/")
     subprocess.run("dig +tries=1 +time=2 @192.0.2.1 srv.stand.test; ping -6 -c1 -W2 2001:db8:1::1", shell=True,
                    capture_output=True)
     time.sleep(1)
@@ -80,7 +80,7 @@ def test_never_default_and_narrow(names):
     assert not chains(narrow) and dns_of(narrow) == ""
     routes = sh(f"ip route show dev {t}")
     assert "100.64.0.0/24" in routes and "203.0.113.0/24" in routes
-    assert "pnv stand: internet" in sh("curl -s -m 10 http://203.0.113.1/")
+    assert "pnv stand: internet" in fetch("http://203.0.113.1/")
     sh("nmcli connection down pnv-r-narrow")
 
     with_dns = awg("pnv-r-nd-dns", allowed_ips="0.0.0.0/0", dns="203.0.113.1")
