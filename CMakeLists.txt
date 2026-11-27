@@ -30,6 +30,7 @@ add_subdirectory(common/auth-dialog)
 add_subdirectory(common/guard)
 add_subdirectory(backends/sb/daemon)
 add_subdirectory(backends/awg/daemon)
+add_subdirectory(backends/xray/daemon)
 
 if(BUILD_EDITORS)
     # ECM looks for Qt 5's qmake unless told otherwise.

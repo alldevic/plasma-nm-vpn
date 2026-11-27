@@ -1,0 +1,5 @@
+# XHTTP modes of xray 26.11.9 (infra/conf/transport_method.go).
+auto
+packet-up
+stream-up
+stream-one

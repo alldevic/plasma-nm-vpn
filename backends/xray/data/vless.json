@@ -1,0 +1,63 @@
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "none"
+  },
+  "inbounds": [
+    {
+      "tag": "tun",
+      "port": 0,
+      "protocol": "tun",
+      "settings": {
+        "name": ""
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "proxy",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "",
+            "port": 0,
+            "users": [
+              {
+                "id": "",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "xhttpSettings": {
+          "host": "",
+          "path": "/",
+          "mode": "auto"
+        },
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "",
+          "fingerprint": "chrome",
+          "password": "",
+          "shortId": ""
+        },
+        "sockopt": {
+          "interface": ""
+        }
+      }
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["tun"],
+        "outboundTag": "proxy"
+      }
+    ]
+  }
+}

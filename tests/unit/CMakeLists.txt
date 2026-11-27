@@ -27,3 +27,8 @@ add_test(NAME awg-config COMMAND test-awg-config ${PROJECT_SOURCE_DIR}/backends/
 add_executable(test-ip4plan test_ip4plan.c)
 target_link_libraries(test-ip4plan PRIVATE pnv-daemon)
 add_test(NAME ip4plan COMMAND test-ip4plan)
+
+add_executable(test-xray-config test_xray_config.c)
+target_link_libraries(test-xray-config PRIVATE pnv-xray-config)
+add_test(NAME xray-config COMMAND test-xray-config ${PROJECT_SOURCE_DIR}/backends/xray/data
+         ${PROJECT_SOURCE_DIR}/tests/golden/xray-26.11.9)

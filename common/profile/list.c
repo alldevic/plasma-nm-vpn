@@ -1,18 +1,23 @@
 /* SPDX-License-Identifier: MIT */
 /* The list files in /usr/share/plasma-nm-vpn/: UTF-8 text, one entry per line, entries made of
- * [A-Za-z0-9_.-]; blank lines and lines starting with '#' are skipped; spaces around an entry are ignored.
+ * [A-Za-z0-9_.-] (a last ".*" segment allowed); blank lines and lines starting with '#' are skipped; spaces around an entry are ignored.
  * An entry may carry fields after it, separated by spaces, made of [A-Za-z0-9_.:-] (the AmneziaWG
  * parameters: "awg-jc Jc uint16"). */
 #include <string.h>
 
 #include "pnv-profile.h"
 
+/* [A-Za-z0-9_.-], and "*" only as a last ".*" segment (any member name there, for JSON allowlists). */
 static gboolean valid_entry(const char *s)
 {
-    if (!*s)
+    gsize n = strlen(s);
+
+    if (!n)
         return FALSE;
-    for (; *s; s++)
-        if (!g_ascii_isalnum(*s) && !strchr("_.-", *s))
+    if (n > 2 && g_str_has_suffix(s, ".*"))
+        n -= 2;
+    for (gsize i = 0; i < n; i++)
+        if (!g_ascii_isalnum(s[i]) && !strchr("_.-", s[i]))
             return FALSE;
     return TRUE;
 }

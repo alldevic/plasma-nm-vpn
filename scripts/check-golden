@@ -1,14 +1,22 @@
 #!/bin/bash
-# check-golden <sing-box>: every golden config for that sing-box version passes `sing-box check`.
+# check-golden sb|xray <binary>: every golden config for the pinned core version passes the core's own check
+# (sing-box check, xray run -test). The AmneziaWG configs need an interface and are checked in the VM (3.1).
 set -euo pipefail
 . "$(dirname "$(readlink -f "$0")")/cores.sh"
 
-bin=$1
-version=$("$bin" version | sed -n 's/^sing-box version //p')
-[ "$version" = "$(pin sb VERSION)" ] || die "$bin is sing-box $version, cores/sb.env pins $(pin sb VERSION)"
-dir=$root/tests/golden/sing-box-$version
-[ -d "$dir" ] || die "no golden files for sing-box $version"
+core=$1 bin=$2
+case $core in
+  sb) version=$("$bin" version | sed -n 's/^sing-box version //p') dir=sing-box ;;
+  xray) version=$("$bin" version | sed -n 's/^Xray \([0-9.]*\) .*/\1/p') dir=xray ;;
+  *) die "usage: check-golden sb|xray <binary>" ;;
+esac
+[ "$version" = "$(pin "$core" VERSION)" ] || die "$bin is $core $version, cores/$core.env pins $(pin "$core" VERSION)"
+dir=$root/tests/golden/$dir-$version
+[ -d "$dir" ] || die "no golden files for $core $version"
 for f in "$dir"/*.json; do
-  "$bin" check -c "$f" || die "sing-box check failed for ${f#"$root"/}"
+  case $core in
+    sb) "$bin" check -c "$f" ;;
+    xray) "$bin" run -test -c "$f" >/dev/null ;;
+  esac || die "the $core check failed for ${f#"$root"/}"
 done
-echo "sing-box $version: $(ls "$dir"/*.json | wc -l) golden configs pass sing-box check"
+echo "$core $version: $(ls "$dir"/*.json | wc -l) golden configs pass the core's check"

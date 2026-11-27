@@ -1,0 +1,25 @@
+# Reality fingerprints of xray 26.11.9 (transport/internet/tls/tls.go): the presets and the "modern" set.
+# Not here: "unsafe" (no uTLS, which Reality needs) and the outdated OtherFingerprints.
+chrome
+firefox
+safari
+ios
+android
+edge
+360
+qq
+random
+randomized
+randomizednoalpn
+hellofirefox_120
+hellofirefox_148
+hellochrome_120
+hellochrome_131
+hellochrome_133
+hellochrome_155
+helloios_13
+helloios_14
+helloedge_106
+hellosafari_26_3
+hello360_11_0
+helloqq_11_1

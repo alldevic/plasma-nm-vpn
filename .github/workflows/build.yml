@@ -48,7 +48,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: scripts/fetch-cores cores-staging
       - name: Golden configs pass the pinned core's check
-        run: scripts/check-golden cores-staging/bin/sing-box
+        run: |
+          scripts/check-golden sb cores-staging/bin/sing-box
+          scripts/check-golden xray cores-staging/bin/xray
       - name: Build packages
         run: |
           dpkg-buildpackage -b -us -uc

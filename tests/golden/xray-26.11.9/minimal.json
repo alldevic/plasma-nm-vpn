@@ -1,0 +1,65 @@
+{
+  "log" : {
+    "loglevel" : "warning",
+    "access" : "none"
+  },
+  "inbounds" : [
+    {
+      "tag" : "tun",
+      "port" : 0,
+      "protocol" : "tun",
+      "settings" : {
+        "name" : "pnv-5ca1ab1e"
+      }
+    }
+  ],
+  "outbounds" : [
+    {
+      "tag" : "proxy",
+      "protocol" : "vless",
+      "settings" : {
+        "vnext" : [
+          {
+            "address" : "198.51.100.1",
+            "port" : 443,
+            "users" : [
+              {
+                "id" : "3c2b9a7e-5f1d-4e8a-9b6c-0d7e8f9a1b2c",
+                "encryption" : "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings" : {
+        "network" : "xhttp",
+        "xhttpSettings" : {
+          "host" : "www.stand.test",
+          "path" : "/",
+          "mode" : "auto"
+        },
+        "security" : "reality",
+        "realitySettings" : {
+          "serverName" : "www.stand.test",
+          "fingerprint" : "chrome",
+          "password" : "OkmsNCxt-wKj42ChHHmk1l-F1XTIG5qE7KoKeOtO0U4",
+          "shortId" : "6ba85179e30d4fc2"
+        },
+        "sockopt" : {
+          "interface" : "eth0"
+        }
+      }
+    }
+  ],
+  "routing" : {
+    "rules" : [
+      {
+        "type" : "field",
+        "inboundTag" : [
+          "tun"
+        ],
+        "outboundTag" : "proxy"
+      }
+    ]
+  }
+}

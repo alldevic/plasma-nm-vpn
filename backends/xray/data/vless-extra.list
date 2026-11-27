@@ -1,0 +1,20 @@
+# Keys a profile's extra may set, merged into the vless outbound, xray 26.11.9. Not here: what the generator
+# sets (settings, the address, port and id, xhttpSettings, realitySettings, sockopt.interface), proxySettings
+# and sockopt.dialerProxy (they divert traffic to another outbound), sockopt.mark (policy routing), sendThrough.
+mux
+mux.enabled
+mux.concurrency
+mux.xudpConcurrency
+mux.xudpProxyUDP443
+streamSettings
+streamSettings.sockopt
+streamSettings.sockopt.tcpFastOpen
+streamSettings.sockopt.tcpKeepAliveInterval
+streamSettings.sockopt.tcpKeepAliveIdle
+streamSettings.sockopt.tcpUserTimeout
+streamSettings.sockopt.tcpCongestion
+streamSettings.sockopt.tcpMaxSeg
+streamSettings.sockopt.tcpWindowClamp
+streamSettings.sockopt.tcpMptcp
+streamSettings.realitySettings
+streamSettings.realitySettings.mldsa65Verify

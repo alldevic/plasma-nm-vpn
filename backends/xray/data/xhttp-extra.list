@@ -1,0 +1,33 @@
+# Keys a profile's xhttp-extra may set, merged into xhttpSettings.extra, xray 26.11.9 (SplitHTTPConfig).
+# Not here: host, path and mode (set by the generator), downloadSettings (a second stream with its own address
+# and sockopt), extra itself.
+headers
+headers.*
+xPaddingBytes
+xPaddingObfsMode
+xPaddingKey
+xPaddingHeader
+xPaddingPlacement
+xPaddingMethod
+uplinkHTTPMethod
+sessionIDPlacement
+sessionIDKey
+sessionIDTable
+sessionIDLength
+seqPlacement
+seqKey
+uplinkDataPlacement
+uplinkDataKey
+uplinkChunkSize
+noGRPCHeader
+noSSEHeader
+scMaxEachPostBytes
+scMinPostsIntervalMs
+scMaxBufferedPosts
+xmux
+xmux.maxConcurrency
+xmux.maxConnections
+xmux.cMaxReuseTimes
+xmux.hMaxRequestTimes
+xmux.hMaxReusableSecs
+xmux.hKeepAlivePeriod

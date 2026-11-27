@@ -280,7 +280,10 @@ static gboolean apply(const Field *f, const char *key, const char *value, const 
                       PnvProfile *profile, PnvProblem *p)
 {
     void *at = (char *)profile + f->offset;
-    gsize max = f->type == T_EXTRA ? 8192 : f->type == T_SECRET ? f->max : f->type == T_AWG_PARAM ? 4096 : 255;
+    gsize max = f->type == T_EXTRA ? 8192
+                : f->type == T_SECRET ? f->max
+                : f->type == T_AWG_PARAM || f->type == T_VLESS_ENCRYPTION ? 4096 /* ML-KEM-768 keys: ~1.6 KB */
+                : 255;
 
     if (!pnv_check_string(key, value, max, p))
         return FALSE;
