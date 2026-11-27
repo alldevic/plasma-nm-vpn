@@ -100,7 +100,7 @@ char *pnv_tun_owner(const char *uuid);
 /* The core unit, one description for all cores (core.c). The argument "${CREDENTIALS_DIRECTORY}/config.json"
  * names the config, which systemd expands at launch. */
 typedef struct {
-    const char *binary;                  /* in PNV_CORE_DIR */
+    const char *binary;                  /* in PNV_CORE_DIR, or an absolute path (the TUN helper) */
     const char *const *args;
     guint64 capabilities;                /* ambient and bounding set */
     const char *const *read_write_paths; /* NULL-terminated, or NULL */

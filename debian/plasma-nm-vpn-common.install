@@ -2,3 +2,4 @@ debian/deactivate-connections usr/lib/plasma-nm-vpn/
 usr/lib/plasma-nm-vpn/plasma-nm-vpn-auth-dialog
 usr/bin/plasma-nm-vpn-guard
 usr/share/plasma-nm-vpn/guard.nft
+usr/lib/plasma-nm-vpn/plasma-nm-vpn-tun-fd

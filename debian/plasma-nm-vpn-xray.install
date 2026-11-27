@@ -1,1 +1,4 @@
+usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-xray
+usr/lib/NetworkManager/VPN/plasma-nm-vpn-vless.name
+usr/share/dbus-1/system.d/plasma-nm-vpn-xray.conf
 usr/share/plasma-nm-vpn/xray/

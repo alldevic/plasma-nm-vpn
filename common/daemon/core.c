@@ -381,7 +381,8 @@ static void watch_core(PnvSession *s)
 gboolean pnv_session_start_core(PnvSession *s, const PnvCore *core, const char *config, GError **error)
 {
     g_autofree char *config_path = g_build_filename(s->run_dir, "config.json", NULL);
-    g_autofree char *binary = g_build_filename(PNV_CORE_DIR, core->binary, NULL);
+    g_autofree char *binary = g_path_is_absolute(core->binary) ? g_strdup(core->binary)
+                                                                : g_build_filename(PNV_CORE_DIR, core->binary, NULL);
     g_autofree char *description = g_strdup_printf("plasma-nm-vpn core for %s", s->uuid);
     g_autoptr(GPtrArray) argv = g_ptr_array_new();
     GVariantBuilder p, credentials;

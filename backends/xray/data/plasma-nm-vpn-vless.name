@@ -1,0 +1,9 @@
+[VPN Connection]
+name=pnv-vless
+service=org.freedesktop.NetworkManager.pnv.vless
+program=/usr/lib/plasma-nm-vpn/plasma-nm-vpn-service-xray
+supports-multiple-connections=true
+
+[GNOME]
+auth-dialog=/usr/lib/plasma-nm-vpn/plasma-nm-vpn-auth-dialog
+supports-external-ui-mode=true
