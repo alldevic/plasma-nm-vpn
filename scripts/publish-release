@@ -9,9 +9,11 @@ repo=$1 tag=$2 dir=$(readlink -f "$3")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-gh release create "$tag" --repo "$repo" --draft --verify-tag --title "$tag" \
-  --notes "Install plasma-nm-vpn-archive-keyring from this page, then \`apt install plasma-nm-vpn\`; see the README." \
-  "$dir"/*
+# The notes name the cores, so that a release with a new core says so.
+notes="Cores: sing-box $(pin sb VERSION), Xray $(pin xray VERSION), amneziawg-go $(pin amneziawg-go VERSION), awg $(pin amneziawg-tools VERSION).
+
+Install plasma-nm-vpn-archive-keyring from this page, then \`apt install plasma-nm-vpn\`; see the README."
+gh release create "$tag" --repo "$repo" --draft --verify-tag --title "$tag" --notes "$notes" "$dir"/*
 
 (cd "$dir" && ls) | sort > "$work/want"
 gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' | sort > "$work/got"
