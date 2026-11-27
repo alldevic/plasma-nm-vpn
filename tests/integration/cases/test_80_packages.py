@@ -17,7 +17,7 @@ DEBS = "/root/debs"
 def reinstall():
     yield
     common, sb = glob.glob(f"{DEBS}/plasma-nm-vpn-common_*.deb"), glob.glob(f"{DEBS}/plasma-nm-vpn-sb_*.deb")
-    sh(f"apt-get install -y -q --no-download {common[0]} {sb[0]}", timeout=300)
+    sh(f"apt-get install -y -q {common[0]} {sb[0]}", timeout=300)
     sh("nmcli connection delete pnv-p-remove", check=False)
 
 

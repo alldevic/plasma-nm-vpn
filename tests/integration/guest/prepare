@@ -11,7 +11,7 @@ getent passwd plasma-nm-vpn >/dev/null || useradd --system --no-create-home --sh
 install -d -o plasma-nm-vpn -g plasma-nm-vpn -m 0750 /run/amneziawg
 install -D -m 0755 -t /opt/pnv-proto/bin "$cores"/bin/*
 if [ -n "${2:-}" ]; then
-  apt-get install -y -q --no-download "$(readlink -f "$2")"/plasma-nm-vpn-common_*.deb \
+  apt-get install -y -q "$(readlink -f "$2")"/plasma-nm-vpn-common_*.deb \
     "$(readlink -f "$2")"/plasma-nm-vpn-sb_*.deb
 fi
 "$here/../stand/stand-up" all
