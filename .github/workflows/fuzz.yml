@@ -27,7 +27,7 @@ jobs:
       - name: Install tools
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends ca-certificates clang cmake make pkgconf \
+          apt-get install -y -q --no-install-recommends ca-certificates clang libclang-rt-dev cmake make pkgconf \
             libglib2.0-dev libjson-glib-dev libnm-dev
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
