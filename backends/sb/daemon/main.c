@@ -78,7 +78,18 @@ static char *hysteria2_config(PnvSession *session)
     json_builder_add_string_value(b, h->tls_sni ? h->tls_sni : profile->server);
     json_builder_set_member_name(b, "insecure");
     json_builder_add_boolean_value(b, h->tls_insecure);
+    if (h->tls_alpn) {
+        json_builder_set_member_name(b, "alpn");
+        json_builder_begin_array(b);
+        for (guint i = 0; i < h->tls_alpn->len; i++)
+            json_builder_add_string_value(b, h->tls_alpn->pdata[i]);
+        json_builder_end_array(b);
+    }
     json_builder_end_object(b);
+    if (pnv_session_parent(session)) {
+        json_builder_set_member_name(b, "bind_interface");
+        json_builder_add_string_value(b, pnv_session_parent(session));
+    }
     json_builder_end_object(b);
     json_builder_end_array(b);
 

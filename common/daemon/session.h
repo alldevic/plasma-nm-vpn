@@ -16,6 +16,12 @@ struct PnvSession {
     char *scope, *guard, *core;
     char tun[IFNAMSIZ];
     char *server_ip;
+    gboolean server_literal;
+    guint32 network;  /* the reserved /30, host byte order */
+    char tun_cidr[24];
+    char *parent;
+    NMClient *client;
+    NMActiveConnection *ac;
     guint core_watch;
     gboolean core_ready;
     char *test_hook;

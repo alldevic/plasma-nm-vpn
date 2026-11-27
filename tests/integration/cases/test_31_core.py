@@ -5,8 +5,8 @@ import time
 import pytest
 
 from conftest import sh
-from helpers import (cursor, daemon_pid, gone, journal, ok, profile, run_dir_exists, scope_pids, tun, tun_exists,
-                     units, uuid_of, wait_for)
+from helpers import (core_pid, cursor, daemon_pid, gone, journal, ok, profile, run_dir_exists, scope_pids, tun,
+                     tun_exists, units, uuid_of, wait_for)
 
 pytestmark = pytest.mark.test_build
 
@@ -47,7 +47,7 @@ def test_up_and_down(active):
     assert u.get(f"plasma-nm-vpn-core-{uuid}.service") == "active"
     assert u.get(f"plasma-nm-vpn-guard-{uuid}.service") == "active"
     assert u.get(f"plasma-nm-vpn-daemon-{uuid}.scope") == "active"
-    assert sh("ps -o user= -C sing-box").split() == ["plasma-nm-vpn"]
+    assert sh(f"ps -o user= -p {core_pid(uuid)}").strip() == "plasma-nm-vpn"
     assert tun_exists(uuid)
     assert sh(f"stat -c '%a %U' /run/plasma-nm-vpn /run/plasma-nm-vpn/{uuid}").split() == ["755", "root", "700", "root"]
     assert chain_exists(uuid)
@@ -105,17 +105,17 @@ def test_leftovers_are_removed():
 def test_up_of_an_active_profile_is_refused_by_nm(active):
     """NM 1.58.1 does not re-activate an active VPN profile (0.7): the live instance is left alone."""
     uuid = active("pnv-c-react")
-    core = sh("pgrep -x sing-box").split()
+    core = core_pid(uuid)
     r = connect("pnv-c-react")
     assert r.returncode != 0 and "already active" in r.stderr
-    assert sh("pgrep -x sing-box").split() == core
+    assert core_pid(uuid) == core
     assert units(uuid).get(f"plasma-nm-vpn-core-{uuid}.service") == "active"
 
 
 def test_reactivation_while_the_old_instance_hangs(active):
     uuid = active("pnv-c-stop")
     old = daemon_of(uuid)
-    core_pid = sh("pgrep -x sing-box").split()
+    core = core_pid(uuid)
     since = cursor()
     sh(f"kill -STOP {old}")
     try:
@@ -127,7 +127,7 @@ def test_reactivation_while_the_old_instance_hangs(active):
         assert "takeover marker placed" in log
         assert "still up after 10 s" in log
         assert not ok(f"test -e /run/plasma-nm-vpn/{uuid}/takeover")
-        assert sh("pgrep -x sing-box").split() == core_pid
+        assert core_pid(uuid) == core
         assert tun_exists(uuid) and run_dir_exists(uuid)
         assert units(uuid).get(f"plasma-nm-vpn-daemon-{uuid}.scope") == "active"
     finally:

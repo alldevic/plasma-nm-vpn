@@ -1,1 +1,3 @@
 d /run/plasma-nm-vpn 0755 root root -
+# Cached server IPs: aged by modification time only, which each successful session refreshes.
+d /var/lib/plasma-nm-vpn 0700 root root m:90d

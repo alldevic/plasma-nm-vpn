@@ -78,7 +78,12 @@ def run_dir_exists(uuid):
     return ok(f"test -d /run/plasma-nm-vpn/{uuid}")
 
 
+def core_pid(uuid):
+    """The core's PID, from its unit (the bench runs a sing-box of its own)."""
+    pid = sh(f"systemctl show -p MainPID --value plasma-nm-vpn-core-{uuid}.service", check=False).strip()
+    return pid if pid not in ("", "0") else None
+
+
 def gone(uuid):
-    """Nothing of the profile's session is left."""
-    return not units(uuid) and not tun_exists(uuid) and not run_dir_exists(uuid) and not sh(
-        "pgrep -x sing-box || true").strip()
+    """Nothing of the profile's session is left: no unit (so no core process), TUN or run directory."""
+    return not units(uuid) and not tun_exists(uuid) and not run_dir_exists(uuid)

@@ -285,6 +285,11 @@ int pnv_daemon_main(int argc, char **argv, const PnvProtocol *const *table)
 
     protocols = table;
     session.cleanups = g_ptr_array_new_with_free_func(cleanup_step_free);
+    session.client = nm_client_new(NULL, &error);
+    if (!session.client) {
+        pnv_warning(NULL, "no NM client (%s): the parent device stays unknown", error->message);
+        g_clear_error(&error);
+    }
     session.plugin = g_initable_new(pnv_plugin_get_type(), NULL, &error,
                                     NM_VPN_SERVICE_PLUGIN_DBUS_SERVICE_NAME, bus_name ? bus_name : table[0]->service,
                                     NM_VPN_SERVICE_PLUGIN_DBUS_WATCH_PEER, TRUE, NULL);

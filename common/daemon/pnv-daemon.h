@@ -28,6 +28,15 @@ gboolean pnv_secret_needed(NMSettingVpn *s_vpn, const PnvSecret *secret);
 #define PNV_CORE_DIR "/usr/lib/plasma-nm-vpn/bin"
 #define PNV_GUARD "/usr/bin/plasma-nm-vpn-guard"
 #define PNV_CORE_USER "plasma-nm-vpn"
+#define PNV_CACHE_DIR "/var/lib/plasma-nm-vpn"
+#define PNV_CONF "/etc/plasma-nm-vpn/plasma-nm-vpn.conf"
+
+/* The server IP (server.c) and the TUN subnet (pool.c). */
+char *pnv_pick_server_ip(GList *v4, GList *v6);
+char *pnv_resolve_server(GResolver *resolver, const char *name, guint timeout_ms, GError **error);
+char *pnv_cache_read(const char *dir, const char *uuid, const char *server);
+gboolean pnv_cache_write(const char *dir, const char *uuid, const char *server, const char *ip, GError **error);
+gboolean pnv_pool_reserve(const char *uuid, const char *run_dir, guint32 *network, GError **error);
 
 /* systemd (units.c). Unit names: plasma-nm-vpn-{daemon,guard,core}-<uuid>.{scope,service}. */
 GDBusConnection *pnv_bus(void);
@@ -70,6 +79,7 @@ gboolean pnv_session_start_core(PnvSession *session, const PnvCore *core, const 
 const char *pnv_session_tun(PnvSession *session);
 const char *pnv_session_server_ip(PnvSession *session);
 const char *pnv_session_tun_cidr(PnvSession *session);
+const char *pnv_session_parent(PnvSession *session); /* the parent device's interface, NULL if none */
 guint pnv_session_mtu(PnvSession *session);
 
 /* The daemon's main(): --bus-name, --debug, the plugin on the bus, the main loop. */

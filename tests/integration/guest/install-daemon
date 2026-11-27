@@ -14,7 +14,8 @@ cmake -S "$root" -B "$build" -DBUILD_EDITORS=OFF -DBUILD_TESTING=OFF -DPNV_TEST_
 cmake --build "$build" >/dev/null
 cmake --install "$build" >/dev/null
 systemd-sysusers - < "$root/debian/plasma-nm-vpn-common.sysusers"
-systemd-tmpfiles --create - < "$root/debian/plasma-nm-vpn-common.tmpfiles"
+install -m 0644 "$root/debian/plasma-nm-vpn-common.tmpfiles" /usr/lib/tmpfiles.d/plasma-nm-vpn-common.conf
+systemd-tmpfiles --create plasma-nm-vpn-common.conf
 install -d /usr/lib/plasma-nm-vpn/bin
 for core in /opt/pnv-proto/bin/*; do
   [ -e "/usr/lib/plasma-nm-vpn/bin/${core##*/}" ] || ln -s "$core" /usr/lib/plasma-nm-vpn/bin/

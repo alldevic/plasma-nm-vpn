@@ -5,17 +5,18 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <glib/gstdio.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "session.h"
 
 #define ORPHAN_WAIT_MS 10000
+#define RESOLVE_WAIT_MS 5000
 #define READY_WAIT_MS 15000
 #define STOP_WAIT_MS 10000
-/* Until 2.4 brings the address pool. */
-#define TEMP_TUN_ADDRESS "198.18.0.1"
-#define TEMP_TUN_PREFIX 30
 #define DEFAULT_MTU 1400
+
+static const char *const default_dns[] = {"1.1.1.1", "9.9.9.9", NULL};
 
 static GVariant *strv(const char *a, const char *b)
 {
@@ -33,9 +34,14 @@ const char *pnv_session_server_ip(PnvSession *s)
     return s->server_ip;
 }
 
-const char *pnv_session_tun_cidr(PnvSession *s G_GNUC_UNUSED)
+const char *pnv_session_tun_cidr(PnvSession *s)
 {
-    return TEMP_TUN_ADDRESS "/30";
+    return s->tun_cidr;
+}
+
+const char *pnv_session_parent(PnvSession *s)
+{
+    return s->parent;
 }
 
 guint pnv_session_mtu(PnvSession *s)
@@ -186,30 +192,96 @@ static gboolean start_guard(PnvSession *s, GError **error)
     return pnv_unit_start(s->guard, &p, error);
 }
 
-/* Temporary until 2.4: a blocking lookup of the first IPv4 address, without its own timeout. */
+/* An IP literal is used as it is; a name is resolved within 5 s, else the cached IP of an earlier successful
+ * session stands in; with neither, Connect fails before anything else is set up. */
 static gboolean resolve(PnvSession *s, GError **error)
 {
     g_autoptr(GResolver) resolver = NULL;
-    GList *addresses;
+    g_autoptr(GError) local = NULL;
+    g_autofree char *path = g_build_filename(s->run_dir, "server-ip", NULL);
 
     if (g_hostname_is_ip_address(s->profile->server)) {
         s->server_ip = g_strdup(s->profile->server);
-        return TRUE;
+        s->server_literal = TRUE;
+    } else {
+        resolver = g_resolver_get_default();
+        s->server_ip = pnv_resolve_server(resolver, s->profile->server, RESOLVE_WAIT_MS, &local);
+        if (!s->server_ip) {
+            s->server_ip = pnv_cache_read(PNV_CACHE_DIR, s->uuid, s->profile->server);
+            if (!s->server_ip) {
+                g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                            "cannot resolve the server name (%s) and there is no cached IP for it", local->message);
+                return FALSE;
+            }
+            pnv_message(s, "cannot resolve the server name (%s): using the cached IP %s", local->message,
+                        s->server_ip);
+        }
     }
-    resolver = g_resolver_get_default();
-    addresses = g_resolver_lookup_by_name_with_flags(resolver, s->profile->server, G_RESOLVER_NAME_LOOKUP_FLAGS_IPV4_ONLY,
-                                                     NULL, error);
-    if (!addresses)
+    pnv_message(s, "server IP %s", s->server_ip);
+    /* The reconnect cycle (5.5) reuses this session's IP. */
+    return g_file_set_contents_full(path, s->server_ip, -1, G_FILE_SET_CONTENTS_CONSISTENT, 0600, error);
+}
+
+/* Our own VPN connection: the newest activation of this profile. */
+static NMActiveConnection *own_connection(PnvSession *s)
+{
+    const GPtrArray *acs = s->client ? nm_client_get_active_connections(s->client) : NULL;
+    NMActiveConnection *own = NULL;
+
+    for (guint i = 0; acs && i < acs->len; i++) {
+        NMActiveConnection *ac = acs->pdata[i];
+        if (nm_active_connection_get_vpn(ac) && g_strcmp0(nm_active_connection_get_uuid(ac), s->uuid) == 0 &&
+            (!own || strcmp(nm_object_get_path(NM_OBJECT(ac)), nm_object_get_path(NM_OBJECT(own))) > 0))
+            own = ac;
+    }
+    return own;
+}
+
+/* A session counts as successful once NM reports the VPN activated (until the liveness check of 5.4). */
+static void activation_changed(NMActiveConnection *ac, guint state, guint reason G_GNUC_UNUSED, gpointer data)
+{
+    PnvSession *s = data;
+    g_autoptr(GError) error = NULL;
+
+    if (state != NM_ACTIVE_CONNECTION_STATE_ACTIVATED || s->server_literal)
+        return;
+    g_signal_handlers_disconnect_by_func(ac, activation_changed, s);
+    if (!pnv_cache_write(PNV_CACHE_DIR, s->uuid, s->profile->server, s->server_ip, &error))
+        pnv_warning(s, "cannot cache the server IP: %s", error->message);
+}
+
+static void find_parent(PnvSession *s)
+{
+    const GPtrArray *devices;
+
+    s->ac = own_connection(s);
+    devices = s->ac ? nm_active_connection_get_devices(s->ac) : NULL;
+    if (devices && devices->len)
+        s->parent = g_strdup(nm_device_get_ip_iface(devices->pdata[0]));
+    if (s->ac) {
+        g_object_ref(s->ac);
+        g_signal_connect(s->ac, "state-changed", G_CALLBACK(activation_changed), s);
+    }
+    if (s->parent)
+        pnv_message(s, "parent device %s", s->parent);
+    else
+        pnv_warning(s, "no parent device for this connection");
+}
+
+static gboolean reserve_subnet(PnvSession *s, GError **error)
+{
+    guint32 a;
+
+    if (!pnv_pool_reserve(s->uuid, s->run_dir, &s->network, error))
         return FALSE;
-    s->server_ip = g_inet_address_to_string(addresses->data);
-    g_resolver_free_addresses(addresses);
+    a = s->network + 1;
+    g_snprintf(s->tun_cidr, sizeof s->tun_cidr, "%u.%u.%u.%u/30", a >> 24, a >> 16 & 0xff, a >> 8 & 0xff, a & 0xff);
+    pnv_message(s, "TUN address %s", s->tun_cidr);
     return TRUE;
 }
 
 gboolean pnv_session_prepare(PnvSession *s, GError **error)
 {
-    g_autoptr(GError) local = NULL;
-
     s->run_dir = pnv_run_dir(s->uuid);
     s->scope = pnv_unit_name("daemon", s->uuid);
     s->guard = pnv_unit_name("guard", s->uuid);
@@ -220,10 +292,9 @@ gboolean pnv_session_prepare(PnvSession *s, GError **error)
 #ifdef PNV_TEST_HOOKS
     test_chain_add(s);
 #endif
-    if (!resolve(s, &local)) {
-        g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED, "cannot resolve the server name: %s", local->message);
+    if (!resolve(s, error) || !reserve_subnet(s, error))
         return FALSE;
-    }
+    find_parent(s);
     pnv_session_add_cleanup(s, "TUN", delete_tun);
     return pnv_tun_create(s->tun, pnv_session_mtu(s), error);
 }
@@ -322,31 +393,63 @@ gboolean pnv_session_start_core(PnvSession *s, const PnvCore *core, const char *
     return FALSE;
 }
 
-/* Temporary until 2.4: the TUN address from the reserved range, the profile's DNS servers. */
+static GVariant *ip4(const char *text)
+{
+    struct in_addr a;
+    inet_pton(AF_INET, text, &a);
+    return g_variant_new_uint32(a.s_addr);
+}
+
+/* Sent once the core has attached (and, from 2.6, the chains are in place). NM sets the address, routes and DNS
+ * itself; the route to the gateway goes via the parent device. */
 void pnv_session_send_config(PnvSession *s)
 {
-    GVariantBuilder b, dns;
-    struct in_addr a, address, server;
+    NMSettingIPConfig *s_ip4 = nm_connection_get_setting_ip4_config(s->connection);
+    gboolean never_default = s_ip4 && nm_setting_ip_config_get_never_default(s_ip4);
+    const GPtrArray *dns = s->profile->dns;
+    GVariantBuilder b, servers, routes;
+    struct in6_addr a6;
 
-    inet_pton(AF_INET, TEMP_TUN_ADDRESS, &address);
-    inet_pton(AF_INET, s->server_ip, &server);
     g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_TUNDEV, g_variant_new_string(s->tun));
-    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_EXT_GATEWAY, g_variant_new_uint32(server.s_addr));
+    if (inet_pton(AF_INET6, s->server_ip, &a6) == 1)
+        g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_EXT_GATEWAY,
+                              g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, &a6, sizeof a6, 1));
+    else
+        g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_EXT_GATEWAY, ip4(s->server_ip));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_HAS_IP4, g_variant_new_boolean(TRUE));
+    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_HAS_IP6, g_variant_new_boolean(FALSE));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CAN_PERSIST, g_variant_new_boolean(TRUE));
-    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_MTU, g_variant_new_uint32(pnv_session_mtu(s)));
+    if (s->profile->mtu)
+        g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_CONFIG_MTU, g_variant_new_uint32(s->profile->mtu));
     nm_vpn_service_plugin_set_config(s->plugin, g_variant_builder_end(&b));
 
-    g_variant_builder_init(&dns, G_VARIANT_TYPE("au"));
-    for (guint i = 0; s->profile->dns && i < s->profile->dns->len; i++) {
-        inet_pton(AF_INET, s->profile->dns->pdata[i], &a);
-        g_variant_builder_add(&dns, "u", a.s_addr);
+    /* DNS (design.md, "DNS"): the profile's servers; the public defaults only for a default-route tunnel; with
+     * never-default, explicit servers get /32 routes via the TUN so that queries to them stay in the tunnel. */
+    g_variant_builder_init(&servers, G_VARIANT_TYPE("au"));
+    g_variant_builder_init(&routes, G_VARIANT_TYPE("aau"));
+    if (dns && dns->len) {
+        for (guint i = 0; i < dns->len; i++) {
+            g_variant_builder_add_value(&servers, ip4(dns->pdata[i]));
+            if (never_default) {
+                GVariantBuilder r;
+                g_variant_builder_init(&r, G_VARIANT_TYPE("au"));
+                g_variant_builder_add_value(&r, ip4(dns->pdata[i]));
+                g_variant_builder_add(&r, "u", 32);
+                g_variant_builder_add(&r, "u", 0);
+                g_variant_builder_add(&r, "u", 0);
+                g_variant_builder_add_value(&routes, g_variant_builder_end(&r));
+            }
+        }
+    } else if (!never_default) {
+        for (const char *const *d = default_dns; *d; d++)
+            g_variant_builder_add_value(&servers, ip4(*d));
     }
     g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
-    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ADDRESS, g_variant_new_uint32(address.s_addr));
-    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_PREFIX, g_variant_new_uint32(TEMP_TUN_PREFIX));
-    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_DNS, g_variant_builder_end(&dns));
+    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ADDRESS, g_variant_new_uint32(htonl(s->network + 1)));
+    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_PREFIX, g_variant_new_uint32(30));
+    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_DNS, g_variant_builder_end(&servers));
+    g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ROUTES, g_variant_builder_end(&routes));
     nm_vpn_service_plugin_set_ip4_config(s->plugin, g_variant_builder_end(&b));
     pnv_message(s, "Config and Ip4Config sent");
 }
