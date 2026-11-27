@@ -1,0 +1,30 @@
+# The kill switch of one default-route tunnel (design.md, "Leak protection"). The daemon substitutes only @UUID@
+# and @LAN@ (its own constant rules for allow-lan=yes, or nothing) and feeds this to nft -f in one transaction;
+# leftover chains of the profile are destroyed in the same transaction. Nothing from the profile goes in.
+add table inet plasma_nm_vpn
+destroy chain inet plasma_nm_vpn ks-out-@UUID@
+destroy chain inet plasma_nm_vpn ks-fwd-@UUID@
+add chain inet plasma_nm_vpn ks-out-@UUID@ { type filter hook output priority filter; policy accept; }
+add chain inet plasma_nm_vpn ks-fwd-@UUID@ { type filter hook forward priority filter; policy accept; }
+
+add rule inet plasma_nm_vpn ks-out-@UUID@ meta skuid "plasma-nm-vpn" return
+add rule inet plasma_nm_vpn ks-out-@UUID@ oifname "lo" return
+add rule inet plasma_nm_vpn ks-out-@UUID@ oifname "pnv-*" return
+# DNS goes nowhere but the tunnel, local networks included: a LAN router would forward it to the ISP.
+add rule inet plasma_nm_vpn ks-out-@UUID@ udp dport { 53, 853 } counter reject
+add rule inet plasma_nm_vpn ks-out-@UUID@ tcp dport { 53, 853 } counter reject with tcp reset
+add rule inet plasma_nm_vpn ks-out-@UUID@ udp sport 68 udp dport 67 return
+add rule inet plasma_nm_vpn ks-out-@UUID@ udp sport 546 udp dport 547 return
+add rule inet plasma_nm_vpn ks-out-@UUID@ icmpv6 type { nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } return
+add rule inet plasma_nm_vpn ks-out-@UUID@ ip6 daddr ff00::/8 icmpv6 type { mld-listener-report, mld2-listener-report, mld-listener-done } return
+@LAN@ks-out-@UUID@
+add rule inet plasma_nm_vpn ks-out-@UUID@ meta l4proto tcp counter reject with tcp reset
+add rule inet plasma_nm_vpn ks-out-@UUID@ counter reject
+
+add rule inet plasma_nm_vpn ks-fwd-@UUID@ oifname "pnv-*" return
+add rule inet plasma_nm_vpn ks-fwd-@UUID@ udp dport { 53, 853 } counter reject
+add rule inet plasma_nm_vpn ks-fwd-@UUID@ tcp dport { 53, 853 } counter reject with tcp reset
+add rule inet plasma_nm_vpn ks-fwd-@UUID@ icmpv6 type { nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } return
+@LAN@ks-fwd-@UUID@
+add rule inet plasma_nm_vpn ks-fwd-@UUID@ meta l4proto tcp counter reject with tcp reset
+add rule inet plasma_nm_vpn ks-fwd-@UUID@ counter reject

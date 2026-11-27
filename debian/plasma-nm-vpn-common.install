@@ -3,3 +3,4 @@ usr/lib/plasma-nm-vpn/plasma-nm-vpn-auth-dialog
 usr/bin/plasma-nm-vpn-guard
 usr/share/plasma-nm-vpn/guard.nft
 usr/lib/plasma-nm-vpn/plasma-nm-vpn-tun-fd
+usr/share/plasma-nm-vpn/killswitch.nft

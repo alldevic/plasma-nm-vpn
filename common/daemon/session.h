@@ -27,10 +27,14 @@ struct PnvSession {
     guint core_watch;
     gboolean core_ready;
     char *test_hook;
+    gboolean kill_switch;          /* the kill switch chains were installed by this session */
+    gboolean give_up;              /* set before nm_vpn_service_plugin_failure, which calls disconnect */
+    guint deactivation_reason;     /* NMActiveConnectionStateReason seen on the VPN connection, 0: none */
 };
 
 /* Steps 1 and 2 of Connect (design.md, "Core supervision and cleanup"), then resolution and the TUN. */
 gboolean pnv_session_prepare(PnvSession *s, GError **error);
 void pnv_session_send_config(PnvSession *s);
+void pnv_session_succeeded(PnvSession *s);
 
 #endif

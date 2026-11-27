@@ -70,6 +70,26 @@ static void remove_guard(PnvSession *s)
     pnv_guard_remove(s->uuid);
 }
 
+/* After success only an explicit disconnect removes the kill switch; a give-up, NM going away or an unknown
+ * reason leaves it (fail closed). A session that never succeeded never leaves it behind. */
+static void decide_kill_switch(PnvSession *s)
+{
+    gboolean succeeded = pnv_state_get(s->run_dir, "succeeded");
+    gboolean explicit = !s->give_up && (s->deactivation_reason == NM_ACTIVE_CONNECTION_STATE_REASON_USER_DISCONNECTED ||
+                                        s->deactivation_reason == NM_ACTIVE_CONNECTION_STATE_REASON_CONNECTION_REMOVED);
+
+    if (!s->kill_switch)
+        return;
+    if (succeeded && !explicit) {
+        pnv_warning(s, "the kill switch stays in place (fail closed): the session ended without an explicit "
+                       "disconnect (reason %u%s)",
+                    s->deactivation_reason, s->give_up ? ", gave up" : "");
+        return;
+    }
+    pnv_killswitch_remove(s->uuid);
+    pnv_message(s, "kill switch removed (%s)", succeeded ? "explicit disconnect" : "the session never succeeded");
+}
+
 static PnvIp4Plan *ip4_plan(PnvSession *s)
 {
     NMSettingIPConfig *s_ip4 = nm_connection_get_setting_ip4_config(s->connection);
@@ -133,21 +153,20 @@ static void test_chain_add(PnvSession *s)
 static gboolean cleanup_orphans(PnvSession *s, GError **error)
 {
     const char *const units[] = {s->scope, s->guard, s->core};
-    g_autofree char *marker = g_build_filename(s->run_dir, "takeover", NULL);
     g_autofree char *owner = NULL;
     gboolean takeover = FALSE;
     gint64 deadline = g_get_monotonic_time() + ORPHAN_WAIT_MS * G_TIME_SPAN_MILLISECOND;
 
     if (!pnv_unit_down(s->scope)) {
         g_mkdir_with_parents(s->run_dir, 0700);
-        takeover = g_file_set_contents_full(marker, "", 0, G_FILE_SET_CONTENTS_NONE, 0600, NULL);
+        takeover = pnv_state_set(s->run_dir, "takeover", TRUE);
         pnv_message(s, "the previous instance is still active: takeover marker placed, waiting for it");
     }
     for (gsize i = 0; i < G_N_ELEMENTS(units); i++) {
         gint64 left = (deadline - g_get_monotonic_time()) / G_TIME_SPAN_MILLISECOND;
         if (!pnv_unit_wait_down(units[i], MAX(left, 0))) {
             if (takeover)
-                g_unlink(marker);
+                pnv_state_set(s->run_dir, "takeover", FALSE);
             g_set_error(error, G_IO_ERROR, G_IO_ERROR_BUSY,
                         "the previous instance of this profile is still up after %d s (%s)", ORPHAN_WAIT_MS / 1000,
                         units[i]);
@@ -263,17 +282,28 @@ static NMActiveConnection *own_connection(PnvSession *s)
     return own;
 }
 
-/* A session counts as successful once NM reports the VPN activated (until the liveness check of 5.4). */
-static void activation_changed(NMActiveConnection *ac, guint state, guint reason G_GNUC_UNUSED, gpointer data)
+/* One call marks success; until the liveness check (5.4) it runs on ACTIVATED. It also refreshes the cached
+ * server IP, which nothing writes earlier. */
+void pnv_session_succeeded(PnvSession *s)
 {
-    PnvSession *s = data;
     g_autoptr(GError) error = NULL;
 
-    if (state != NM_ACTIVE_CONNECTION_STATE_ACTIVATED || s->server_literal)
-        return;
-    g_signal_handlers_disconnect_by_func(ac, activation_changed, s);
-    if (!pnv_cache_write(PNV_CACHE_DIR, s->uuid, s->profile->server, s->server_ip, &error))
+    pnv_state_set(s->run_dir, "succeeded", TRUE);
+    pnv_message(s, "session succeeded");
+    if (!s->server_literal && !pnv_cache_write(PNV_CACHE_DIR, s->uuid, s->profile->server, s->server_ip, &error))
         pnv_warning(s, "cannot cache the server IP: %s", error->message);
+}
+
+/* NM tells why the VPN goes down (0.7: before Disconnect reaches the daemon); only a user's disconnect and the
+ * removal of the profile count as explicit. */
+static void activation_changed(NMActiveConnection *ac G_GNUC_UNUSED, guint state, guint reason, gpointer data)
+{
+    PnvSession *s = data;
+
+    if (state == NM_ACTIVE_CONNECTION_STATE_ACTIVATED && !pnv_state_get(s->run_dir, "succeeded"))
+        pnv_session_succeeded(s);
+    if (state >= NM_ACTIVE_CONNECTION_STATE_DEACTIVATING && !s->deactivation_reason)
+        s->deactivation_reason = reason;
 }
 
 static void find_parent(PnvSession *s)
@@ -332,17 +362,26 @@ gboolean pnv_session_prepare(PnvSession *s, GError **error)
         return FALSE;
     find_parent(s);
     /* Removed after the TUN on disconnect, so they are registered first; installed after it, before the core. */
+    pnv_session_add_cleanup(s, "kill switch", decide_kill_switch);
     pnv_session_add_cleanup(s, "DNS and IPv6 guard", remove_guard);
     pnv_session_add_cleanup(s, "TUN", delete_tun);
     if (!pnv_tun_create(s->tun, pnv_session_mtu(s), error))
         return FALSE;
     if (!default_route(s)) {
-        pnv_message(s, "never-default: no DNS and IPv6 guard");
+        pnv_message(s, "never-default: no DNS and IPv6 guard%s",
+                    s->profile->kill_switch ? ", and kill-switch=yes is ignored (only for default-route tunnels)" : "");
         return TRUE;
     }
     if (!pnv_guard_install(s->uuid, error))
         return FALSE;
     pnv_message(s, "DNS and IPv6 guard installed");
+    if (!s->profile->kill_switch)
+        return TRUE;
+    /* Until 5.2: leftover chains of this profile are replaced in the same transaction. */
+    if (!pnv_killswitch_install(s->uuid, s->profile->allow_lan, error))
+        return FALSE;
+    s->kill_switch = TRUE;
+    pnv_message(s, "kill switch installed (allow-lan=%s)", s->profile->allow_lan ? "yes" : "no");
     return TRUE;
 }
 

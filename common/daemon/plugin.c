@@ -80,6 +80,7 @@ void pnv_give_up(PnvSession *s, NMVpnPluginFailure code, const char *fmt, ...)
                 : code == NM_VPN_PLUGIN_FAILURE_BAD_IP_CONFIG ? "bad IP config"
                                                               : "connect failed",
                 reason);
+    s->give_up = TRUE;
     nm_vpn_service_plugin_failure(s->plugin, code);
 }
 

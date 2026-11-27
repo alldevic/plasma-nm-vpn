@@ -52,6 +52,9 @@ gboolean pnv_daemon_gone(const char *uuid)
     pnv_tun_delete(tun);
     g_unlink(socket_path = pnv_uapi_socket(tun));
     pnv_guard_remove(uuid);
+    /* Fail closed: after a session that had succeeded, the kill switch outlives the daemon. */
+    if (!pnv_state_get(run, "succeeded"))
+        pnv_killswitch_remove(uuid);
 #ifdef PNV_TEST_HOOKS
     {
         g_autofree char *script = g_strdup_printf("add table inet plasma_nm_vpn\n"

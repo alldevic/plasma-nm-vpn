@@ -126,7 +126,7 @@ def test_reactivation_while_the_old_instance_hangs(active):
         log = journal(since, "GLIB_DOMAIN=plasma-nm-vpn")
         assert "takeover marker placed" in log
         assert "still up after 10 s" in log
-        assert not ok(f"test -e /run/plasma-nm-vpn/{uuid}/takeover")
+        assert "takeover=true" not in sh(f"cat /run/plasma-nm-vpn/{uuid}/state 2>/dev/null || true")
         assert core_pid(uuid) == core
         assert tun_exists(uuid) and run_dir_exists(uuid)
         assert units(uuid).get(f"plasma-nm-vpn-daemon-{uuid}.scope") == "active"

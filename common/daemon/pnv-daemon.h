@@ -48,6 +48,8 @@ gboolean pnv_secret_needed(NMSettingVpn *s_vpn, const PnvSecret *secret);
 gboolean pnv_nft_run(const char *script, GError **error);
 gboolean pnv_guard_install(const char *uuid, GError **error);
 void pnv_guard_remove(const char *uuid);
+gboolean pnv_killswitch_install(const char *uuid, gboolean allow_lan, GError **error);
+void pnv_killswitch_remove(const char *uuid);
 
 /* The server IP (server.c) and the TUN subnet (pool.c). */
 char *pnv_pick_server_ip(GList *v4, GList *v6);
@@ -94,6 +96,8 @@ gboolean pnv_uuid_valid(const char *uuid);
 char *pnv_run_dir(const char *uuid);
 void pnv_run_dir_remove(const char *path);
 char *pnv_uapi_socket(const char *tun); /* /run/amneziawg/<tun>.sock */
+gboolean pnv_state_get(const char *run_dir, const char *marker);
+gboolean pnv_state_set(const char *run_dir, const char *marker, gboolean value);
 gboolean pnv_daemon_gone(const char *uuid);
 char *pnv_tun_owner(const char *uuid);
 
