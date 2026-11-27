@@ -81,7 +81,9 @@ def test_default_dns(names):
     assert sh(f"nmcli -g IP4.DNS device show {t}").strip() == "1.1.1.1 | 9.9.9.9"
     if DNS_MODE == "resolved":
         status = sh(f"resolvectl status {t}")
-        assert "1.1.1.1" in status and "9.9.9.9" in status and "~." in status
+        # NM 1.58 marks the link as the default DNS route instead of adding the ~. domain.
+        assert "1.1.1.1" in status and "9.9.9.9" in status
+        assert "~." in status or "Default Route: yes" in status
     else:
         servers = [l.split()[1] for l in sh("cat /etc/resolv.conf").splitlines() if l.startswith("nameserver")]
         assert servers[:2] == ["1.1.1.1", "9.9.9.9"]
@@ -136,6 +138,8 @@ def no_dns():
     """The "ISP" DNS stops answering: queries to it are dropped."""
     sh("nft add table inet pnvtest && nft add chain inet pnvtest out '{ type filter hook output priority 0; }' && "
        "nft add rule inet pnvtest out udp dport 53 drop && nft add rule inet pnvtest out tcp dport 53 drop")
+    if DNS_MODE == "resolved":
+        sh("resolvectl flush-caches")
     yield
     sh("nft delete table inet pnvtest")
 

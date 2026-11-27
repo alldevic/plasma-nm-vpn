@@ -53,5 +53,6 @@ def test_build(request):
     try:
         yield
     finally:
+        # Lazy: a daemon still exiting keeps the file busy; it goes on with the copy it runs.
         for b in TEST_BINARIES:
-            sh(f"umount /{b}", check=False)
+            sh(f"umount -l /{b}", check=False)

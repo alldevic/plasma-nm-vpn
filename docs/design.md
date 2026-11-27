@@ -272,7 +272,7 @@ Proxy cores get no address from the server. The daemon takes a /30 subnet from 1
 
 - The daemon passes the DNS servers in `Ip4Config`: those from the profile, or the defaults for a default-route tunnel (see “Profile data schema”). With a default-route tunnel, queries to them go into the tunnel.
 - With never-default, no defaults are passed: otherwise public resolvers would take over the system's DNS and be queried directly via the ISP. DNS servers the user set explicitly get /32 routes via the TUN, so that queries to them still go into the tunnel.
-- With a default-route tunnel, NM itself adds the routing domain `~.` to the VPN connection if it has no search domains of its own: with systemd-resolved, all queries go through the VPN. In `resolv.conf` mode, the VPN's DNS servers (priority 50) come before the devices' DNS servers (100).
+- With a default-route tunnel, NM itself makes the VPN the default DNS route: with systemd-resolved, all queries go through the VPN (NM 1.58.1 shows this as `Default Route: yes` on the link in `resolvectl status`, not as a `~.` domain; 2.7). In `resolv.conf` mode, the VPN's DNS servers (priority 50) come before the devices' DNS servers (100).
 - Queries to other connections' DNS servers, if they do go past the tunnel, are cut off by the DNS guard from the next section. The editor cannot set a negative `ipv4.dns-priority` (see “plasma-nm user interface”). Such queries fail fast (reject, not drop); users can set a negative priority themselves on the IPv4 tab to avoid these needless queries altogether.
 
 ### Leak protection
