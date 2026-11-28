@@ -811,8 +811,11 @@ gboolean pnv_session_start_core(PnvSession *s, const PnvCore *core, const char *
     GVariantBuilder p, credentials;
 
 #ifdef PNV_TEST_HOOKS
-    if (g_strcmp0(s->test_hook, "broken-config") == 0)
-        config = "{\"broken\":";
+    /* broken-config: the core unit fails at once, for any core (amneziawg-go reads no config file). */
+    if (g_strcmp0(s->test_hook, "broken-config") == 0) {
+        g_free(binary);
+        binary = g_strdup("/bin/false");
+    }
 #endif
     if (config && !g_file_set_contents_full(config_path, config, -1, G_FILE_SET_CONTENTS_CONSISTENT, 0600, error))
         return FALSE;
