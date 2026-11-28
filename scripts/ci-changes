@@ -1,0 +1,17 @@
+#!/bin/bash
+# ci-changes <base> <head> [<path>...]: print code=true if the commits between base and head touch anything but
+# documentation (docs/, *.md, LICENSE), or, with paths, anything under those paths; code=false otherwise. An unknown
+# base (a new branch, a force push) counts as a change. Used by the workflows to skip work a change cannot affect.
+set -euo pipefail
+
+base=$1 head=$2
+shift 2
+if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+  echo code=true
+  exit 0
+fi
+files=$(git diff --name-only "$base" "$head" -- "$@")
+if [ $# -eq 0 ]; then
+  files=$(grep -vE '^docs/|\.md$|^LICENSE$' <<<"$files" || true)
+fi
+[ -n "$files" ] && echo code=true || echo code=false

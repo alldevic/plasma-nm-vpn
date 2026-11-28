@@ -9,7 +9,28 @@ permissions:
   contents: read
 
 jobs:
+  # Whether the change can affect what the jobs below check: documentation alone (docs/, *.md, LICENSE) cannot.
+  # Jobs skipped by their condition count as passed for required checks. A manual run always runs.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then echo code=true; else scripts/ci-changes "$BASE" "$HEAD"; fi >> "$GITHUB_OUTPUT"
+
   integration:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:

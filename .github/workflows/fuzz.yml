@@ -15,7 +15,30 @@ permissions:
   contents: read
 
 jobs:
+  # The weekly run is skipped when the fuzzed code (the profile library, the targets and their seeds) has not changed
+  # in the last week; a manual run always runs.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo code=true
+          else
+            scripts/ci-changes "$(git rev-list -1 --before='8 days ago' HEAD)" HEAD common/profile tests/fuzz
+          fi >> "$GITHUB_OUTPUT"
+
   fuzz:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     container: debian:forky
     timeout-minutes: 50
