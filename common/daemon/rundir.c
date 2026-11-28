@@ -56,6 +56,8 @@ gboolean pnv_daemon_gone(const char *uuid)
      * switch outlives the daemon. */
     if (!pnv_state_get(run, "succeeded") && !pnv_state_get(run, "inherited"))
         pnv_killswitch_remove(uuid);
+    else
+        pnv_status_block(uuid, "daemon-gone");
 #ifdef PNV_TEST_HOOKS
     {
         g_autofree char *script = g_strdup_printf("add table inet plasma_nm_vpn\n"

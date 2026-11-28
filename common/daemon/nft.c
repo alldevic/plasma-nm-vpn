@@ -115,3 +115,23 @@ gboolean pnv_killswitch_present(const char *uuid)
 
     return nft && g_subprocess_wait(nft, NULL, NULL) && g_subprocess_get_successful(nft);
 }
+
+GStrv pnv_killswitch_list(void)
+{
+    g_autoptr(GSubprocess) nft = g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE,
+                                                  NULL, NFT, "list", "table", "inet", "plasma_nm_vpn", NULL);
+    g_autofree char *out = NULL;
+    g_autoptr(GStrvBuilder) uuids = g_strv_builder_new();
+    g_auto(GStrv) lines = NULL;
+
+    if (nft && g_subprocess_communicate_utf8(nft, NULL, NULL, &out, NULL, NULL) && out) {
+        lines = g_strsplit(out, "\n", -1);
+        for (GStrv l = lines; *l; l++) {
+            const char *at = strstr(*l, "chain ks-out-");
+            g_autofree char *uuid = at ? g_strndup(at + strlen("chain ks-out-"), 36) : NULL;
+            if (uuid && pnv_uuid_valid(uuid))
+                g_strv_builder_add(uuids, uuid);
+        }
+    }
+    return g_strv_builder_end(uuids);
+}

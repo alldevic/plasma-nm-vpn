@@ -51,6 +51,12 @@ void pnv_guard_remove(const char *uuid);
 gboolean pnv_killswitch_install(const char *uuid, gboolean allow_lan, GError **error);
 void pnv_killswitch_remove(const char *uuid);
 gboolean pnv_killswitch_present(const char *uuid);
+GStrv pnv_killswitch_list(void); /* the UUIDs that have kill switch chains */
+
+/* guard-status (status.c): reason is gave-up, daemon-gone or inherited. */
+void pnv_status_block(const char *uuid, const char *reason);
+void pnv_status_clear(const char *uuid);
+GStrv pnv_status_list(void);
 
 /* The server IP (server.c) and the TUN subnet (pool.c). */
 char *pnv_pick_server_ip(GList *v4, GList *v6);

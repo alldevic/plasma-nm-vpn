@@ -88,9 +88,11 @@ static void decide_kill_switch(PnvSession *s)
         pnv_warning(s, "the kill switch stays in place (fail closed): the session ended without an explicit "
                        "disconnect (reason %u%s)",
                     s->deactivation_reason, s->give_up ? ", gave up" : "");
+        pnv_status_block(s->uuid, "gave-up");
         return;
     }
     pnv_killswitch_remove(s->uuid);
+    pnv_status_clear(s->uuid);
     pnv_message(s, "kill switch removed (%s)", succeeded ? "explicit disconnect" : "the session never succeeded");
 }
 
@@ -313,6 +315,7 @@ void pnv_session_succeeded(PnvSession *s)
             pnv_killswitch_remove(s->uuid);
         }
         pnv_message(s, "inherited block %s", s->kill_switch ? "taken over" : "removed (the profile no longer asks for it)");
+        pnv_status_clear(s->uuid);
         s->inherited = FALSE;
         pnv_state_set(s->run_dir, "inherited", FALSE);
     }
@@ -386,6 +389,7 @@ gboolean pnv_session_prepare(PnvSession *s, GError **error)
         s->inherited = TRUE;
         pnv_state_set(s->run_dir, "inherited", TRUE);
         pnv_message(s, "the kill switch of an earlier session is in place: working under it (inherited block)");
+        pnv_status_block(s->uuid, "inherited");
     }
 #ifdef PNV_TEST_HOOKS
     test_chain_add(s);
