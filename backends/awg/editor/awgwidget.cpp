@@ -341,6 +341,7 @@ AwgWidget::AwgWidget(const NetworkManager::VpnSetting::Ptr &setting, QWidget *pa
               new AwgParamsBlock(dataDir + QStringLiteral("/amneziawg-params.list"))});
     addGroup(i18nc("@title:group", "Protection"), {m_protection});
     addGroup(i18nc("@title:group", "Advanced"), {new PnvAdvancedBlock(Service)});
+    addImport({{"awg/", dataDir + QStringLiteral("/amneziawg-params.list")}});
     connect(m_peer, &PnvBlock::changed, this, &AwgWidget::updateKillSwitch);
     finish(setting);
     updateKillSwitch();

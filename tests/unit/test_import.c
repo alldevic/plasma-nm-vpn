@@ -128,7 +128,7 @@ static void test_hysteria2_details(void)
     g_assert_cmpstr(data(plain, "server"), ==, "2001:db8::1");
     /* A parameter the allowlist names goes into extra, the others are dropped with a warning. */
     g_assert_cmpstr(data(unknown, "extra"), ==, "{\"udp_fragment\":\"true\"}");
-    g_assert_cmpstr(w, ==, "dropped:upmbps:0 dropped:fastopen:0");
+    g_assert_cmpstr(w, ==, "dropped:upmbps:0 to-extra:udp_fragment:0 dropped:fastopen:0");
 }
 
 static void test_hysteria2_unsupported(void)

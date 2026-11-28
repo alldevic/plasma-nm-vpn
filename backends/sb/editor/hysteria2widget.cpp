@@ -126,6 +126,7 @@ Hysteria2Widget::Hysteria2Widget(const NetworkManager::VpnSetting::Ptr &setting,
     addGroup(i18nc("@title:group", "Obfuscation, port hopping"), {m_obfs});
     addGroup(i18nc("@title:group", "Protection"), {new PnvProtectionBlock(Service)});
     addGroup(i18nc("@title:group", "Advanced"), {new PnvAdvancedBlock(Service, extraAllowlist)});
+    addImport({{"extra/", extraAllowlist}});
     finish(setting);
 }
 

@@ -8,6 +8,7 @@
 
 #include "authblock.h"
 #include "block.h"
+#include "importwidget.h"
 #include "passwordfield.h"
 #include "settingwidget.h"
 
@@ -36,15 +37,29 @@ protected:
     PnvAuthBlock *authBlock(const QString &label, const QString &key, PasswordField *field);
     // The storage written for a secret; editors override it where another field decides.
     virtual PasswordField::PasswordOption secretOption(const QString &key, const PasswordField *field) const;
+    // "Paste link or config" and "Open File…" (6.7), with the lists the editor's daemon loads.
+    void addImport(const QList<PnvImportWidget::ListFile> &lists);
     // Called at the end of the subclass constructor, once the fields exist.
     void finish(const NetworkManager::VpnSetting::Ptr &setting);
+
+public:
+    // Fills the form from an import; asks first if the form already has fields filled in. False if declined.
+    bool applyImport(const NMStringMap &data, const NMStringMap &secrets);
+    // For tests: the question before an import replaces filled-in fields.
+    void setImportConfirmation(std::function<bool()> confirm);
+
+protected:
 
     QString m_service;
 
 private:
+    bool filled() const;
+
     QVBoxLayout *m_content;
     QList<PnvBlock *> m_blocks;
     QList<QPair<QString, PasswordField *>> m_secrets;
+    QStringList m_optional;
+    std::function<bool()> m_confirm;
 };
 
 // The prompt kded6 shows for a secret asked every time or rejected: the secrets NM names in its hints, otherwise

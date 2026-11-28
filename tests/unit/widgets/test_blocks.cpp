@@ -235,15 +235,15 @@ private Q_SLOTS:
         QVERIFY(block.isValid());
     }
 
-    void everyValidatorCodeHasAMessage()
+    void everyValidatorAndParserCodeHasAMessage()
     {
-        for (int c = PNV_CODES_VALIDATOR_FIRST; c <= PNV_CODES_VALIDATOR_LAST; c++)
+        for (int c = PNV_CODES_VALIDATOR_FIRST; c <= PNV_CODES_PARSER_LAST; c++)
             QVERIFY2(pnvHasMessage(PnvCode(c)), pnv_code_name(PnvCode(c)));
     }
 
     void codeWithoutMessage()
     {
-        PnvProblem problem{PnvCode(PNV_CODES_VALIDATOR_LAST + 1000), nullptr, nullptr, 0, 0, 0};
+        PnvProblem problem{PnvCode(PNV_CODES_PARSER_LAST + 1000), nullptr, nullptr, 0, 0, 0};
         QCOMPARE(pnvProblemMessage(problem), QString::fromLatin1(pnv_code_name(problem.code)));
     }
 };

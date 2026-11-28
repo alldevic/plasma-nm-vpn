@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 #include "pnv-editor.h"
 
+#include <KLocalizedString>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QMessageBox>
 #include <QScrollArea>
 #include <QVBoxLayout>
 
@@ -58,6 +60,8 @@ PasswordField *PnvEditorWidget::secretField(const QString &key, bool optional)
     field->setPasswordOptionsEnabled(true);
     field->setPasswordNotRequiredEnabled(optional);
     m_secrets.append({key, field});
+    if (optional)
+        m_optional.append(key);
     return field;
 }
 
@@ -73,6 +77,59 @@ PnvAuthBlock *PnvEditorWidget::authBlock(const QString &label, const QString &ke
 PasswordField::PasswordOption PnvEditorWidget::secretOption(const QString &, const PasswordField *field) const
 {
     return field->passwordOption();
+}
+
+void PnvEditorWidget::addImport(const QList<PnvImportWidget::ListFile> &lists)
+{
+    auto *box = new QGroupBox(i18nc("@title:group", "Import"));
+    auto *layout = new QVBoxLayout(box);
+    layout->addWidget(new PnvImportWidget(m_service, lists, [this](const NMStringMap &data, const NMStringMap &secrets) {
+        return applyImport(data, secrets);
+    }));
+    // Under the kill switch banner, above the groups.
+    m_content->insertWidget(1, box);
+}
+
+void PnvEditorWidget::setImportConfirmation(std::function<bool()> confirm)
+{
+    m_confirm = std::move(confirm);
+}
+
+// A server or a secret already entered.
+bool PnvEditorWidget::filled() const
+{
+    NMStringMap data;
+    for (PnvBlock *block : m_blocks)
+        block->write(data);
+    if (!data.value(QStringLiteral("server")).isEmpty())
+        return true;
+    for (const auto &[key, field] : m_secrets)
+        if (!field->text().isEmpty())
+            return true;
+    return false;
+}
+
+bool PnvEditorWidget::applyImport(const NMStringMap &data, const NMStringMap &secrets)
+{
+    if (filled()) {
+        const bool replace = m_confirm ? m_confirm()
+                                       : QMessageBox::question(this, i18nc("@title:window", "Replace the Fields?"),
+                                                               i18nc("@info", "The imported settings replace the ones in the form."))
+                == QMessageBox::Yes;
+        if (!replace)
+            return false;
+    }
+    for (PnvBlock *block : std::as_const(m_blocks))
+        block->load(data);
+    // The storage stays the field's default; an optional secret the import has none of is not required.
+    for (const auto &[key, field] : std::as_const(m_secrets)) {
+        field->setText(secrets.value(key));
+        if (secrets.value(key).isEmpty() && m_optional.contains(key))
+            field->setPasswordOption(PasswordField::NotRequired);
+    }
+    Q_EMIT validChanged(isValid());
+    slotWidgetChanged();
+    return true;
 }
 
 void PnvEditorWidget::finish(const NetworkManager::VpnSetting::Ptr &setting)

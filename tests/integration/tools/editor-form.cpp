@@ -5,7 +5,8 @@
 //   editor-form <service> new <name> [<object>=<value> | <field>:option=<option> ...]
 //   editor-form <service> edit <uuid> [...]
 // A value goes into the QLineEdit, QPlainTextEdit, PasswordField, QCheckBox (yes/no) or QComboBox (item data) of
-// that name; click=<button> presses a button. Options: user, all, ask, none. Prints one JSON line: valid, problems, uuid.
+// that name; click=<button> presses a button; importFile=<path> imports a file. Options: user, all, ask, none.
+// Prints one JSON line: valid, problems, uuid, and the import and banner messages when shown.
 #include <NetworkManagerQt/Connection>
 #include <NetworkManagerQt/ConnectionSettings>
 #include <NetworkManagerQt/Settings>
@@ -25,6 +26,7 @@
 
 #include <iostream>
 
+#include "importwidget.h"
 #include "passwordfield.h"
 #include "vpnuiplugin.h"
 
@@ -36,6 +38,11 @@ static int fail(const QString &why)
 
 static bool set(QWidget *form, const QString &name, const QString &value)
 {
+    // importFile=<path>: what "Open File…" does once a file is chosen.
+    if (name == QLatin1String("importFile")) {
+        auto *import = form->findChild<PnvImportWidget *>();
+        return import && (import->importFile(value), true);
+    }
     // click=<button>: e.g. a table's Add button, before its new row's fields are set.
     if (name == QLatin1String("click")) {
         auto *button = form->findChild<QAbstractButton *>(value);
@@ -121,6 +128,8 @@ int main(int argc, char **argv)
             problems.append(label->text());
     QJsonObject out{{QStringLiteral("valid"), form->isValid()}, {QStringLiteral("problems"), problems},
                     {QStringLiteral("uuid"), settings->uuid()}};
+    if (const auto *import = form->findChild<PnvImportWidget *>(); import && !import->message().isEmpty())
+        out.insert(QStringLiteral("import"), import->message());
     // The kill switch banner (6.2), when the form shows it.
     if (const auto *banner = form->findChild<KMessageWidget *>(); banner && banner->isVisibleTo(form))
         out.insert(QStringLiteral("banner"), banner->text());

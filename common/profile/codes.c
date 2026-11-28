@@ -55,6 +55,7 @@ static const struct {
     [PNV_W_EXTRA_ADDRESS] = {"extra-address", "%K: entry %P was dropped, only the first IPv4 address is used"},
     [PNV_W_IPV6] = {"ipv6", "%K: entry %P is IPv6 and was dropped"},
     [PNV_W_DNS_NAME] = {"dns-name", "%K: entry %P is not an IP address and was dropped"},
+    [PNV_W_TO_EXTRA] = {"to-extra", "%K was carried into the additional parameters"},
 };
 
 const char *pnv_code_name(PnvCode code)

@@ -189,6 +189,7 @@ static void unknown_param(PnvImport *import, const char *name, const char *value
 
     if (lists && pnv_list_contains(lists, entry) && !strchr(name, '.')) {
         json_object_set_string_member(extra, name, value);
+        warn(import, PNV_W_TO_EXTRA, name, 0);
         return;
     }
     warn(import, PNV_W_DROPPED, name, 0);

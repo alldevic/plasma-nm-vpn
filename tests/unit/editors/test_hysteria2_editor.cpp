@@ -3,7 +3,10 @@
 // flags, persistent and schema; the prompt widget.
 #include <QLabel>
 #include <QLineEdit>
+#include <QFile>
 #include <QPlainTextEdit>
+#include <QPushButton>
+#include <QSignalSpy>
 #include <QTest>
 
 #include "hysteria2widget.h"
@@ -129,6 +132,45 @@ private Q_SLOTS:
         auto *hint = widget.findChild<QLabel *>(QStringLiteral("killSwitchHint"));
         QVERIFY(hint && hint->isVisibleTo(&widget));
         QCOMPARE(hint->text(), QStringLiteral("The kill switch applies only when all traffic goes through the VPN"));
+    }
+
+    void importFillsTheForm()
+    {
+        Hysteria2Widget widget(profile({}), nullptr, extraList);
+        QFile link(QStringLiteral(PNV_SOURCE_DIR "/tests/unit/data/import/bench-hysteria2.txt"));
+        QVERIFY(link.open(QIODevice::ReadOnly));
+        auto *paste = widget.findChild<QPlainTextEdit *>(QStringLiteral("importText"));
+        paste->setPlainText(QString::fromUtf8(link.readAll()));
+        QSignalSpy valid(&widget, &SettingWidget::validChanged);
+        widget.findChild<QPushButton *>(QStringLiteral("importButton"))->click();
+        QVERIFY(paste->toPlainText().isEmpty());
+        QVERIFY(widget.isValid());
+        QVERIFY(!valid.isEmpty() && valid.last().at(0).toBool());
+        const NetworkManager::VpnSetting vpn = saved(widget);
+        QCOMPARE(vpn.data().value(QStringLiteral("server")), QStringLiteral("srv.stand.test"));
+        QCOMPARE(vpn.data().value(QStringLiteral("obfs")), QStringLiteral("salamander"));
+        QCOMPARE(vpn.secrets().value(QStringLiteral("obfs-password")), QStringLiteral("79b63d51a9800c5338f711cff5890afa"));
+    }
+
+    void importAsksBeforeReplacing()
+    {
+        Hysteria2Widget widget(profile(full, map({{"password", "mine"}})), nullptr, extraList);
+        int asked = 0;
+        widget.setImportConfirmation([&asked] {
+            asked++;
+            return false;
+        });
+        const NMStringMap before = saved(widget).data();
+        QVERIFY(!widget.applyImport(map({{"server", "other.example"}, {"ports", "443"}}), {}));
+        QCOMPARE(asked, 1);
+        QCOMPARE(saved(widget).data(), before);
+        widget.setImportConfirmation([] {
+            return true;
+        });
+        QVERIFY(widget.applyImport(map({{"server", "other.example"}, {"ports", "443"}}), {}));
+        QCOMPARE(saved(widget).data().value(QStringLiteral("server")), QStringLiteral("other.example"));
+        // The optional secret the import has none of is not required.
+        QCOMPARE(saved(widget).data().value(QStringLiteral("obfs-password-flags")), QStringLiteral("4"));
     }
 
     void prompt()

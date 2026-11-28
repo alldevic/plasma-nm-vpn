@@ -51,6 +51,21 @@ constexpr Message messages[] = {
     {PNV_E_BAD_PATH, kli18nc("@info", "%1: must start with / and have no spaces"), "k"},
     {PNV_E_BAD_ENCRYPTION, kli18nc("@info", "%1: must be none or a VLESS Encryption key"), "k"},
     {PNV_E_BAD_CHAIN, kli18nc("@info", "%1: a tag chain cannot hold the characters # = [ ] or control characters"), "k"},
+    // The import parsers (6.6).
+    {PNV_E_IMPORT_FORMAT, kli18nc("@info", "This is not a hysteria2://, hy2:// or vless:// link nor an AmneziaWG configuration"), ""},
+    {PNV_E_IMPORT_TOO_LARGE, kli18nc("@info", "The text to import is larger than %1 bytes"), "x"},
+    {PNV_E_IMPORT_UNSUPPORTED, kli18nc("@info", "%1 is not supported in this version"), "d"},
+    {PNV_E_IMPORT_BAD_LINK, kli18nc("@info the part of a link: host, port, path…", "The link has a malformed %1"), "d"},
+    {PNV_E_IMPORT_NOT_REALITY, kli18nc("@info", "The link's %1 is not supported: only XHTTP transport with Reality is"), "k"},
+    {PNV_E_IMPORT_PEERS, kli18nc("@info", "The configuration has more than one [Peer]; only one is supported"), ""},
+    {PNV_E_IMPORT_BAD_LINE, kli18nc("@info", "The configuration has a malformed line %1"), "l"},
+    {PNV_E_IMPORT_DUPLICATE, kli18nc("@info", "%1 is given twice"), "k"},
+    {PNV_W_DROPPED, kli18nc("@info", "%1 is not supported here and was dropped"), "k"},
+    {PNV_W_WG_QUICK, kli18nc("@info", "%1 is a wg-quick setting and was dropped"), "k"},
+    {PNV_W_EXTRA_ADDRESS, kli18nc("@info", "%1: entry %2 was dropped, only the first IPv4 address is used"), "kp"},
+    {PNV_W_IPV6, kli18nc("@info", "%1: entry %2 is IPv6 and was dropped"), "kp"},
+    {PNV_W_DNS_NAME, kli18nc("@info", "%1: entry %2 is not an IP address and was dropped"), "kp"},
+    {PNV_W_TO_EXTRA, kli18nc("@info", "%1 was carried into the additional parameters"), "k"},
 };
 
 const Message *find(PnvCode code)

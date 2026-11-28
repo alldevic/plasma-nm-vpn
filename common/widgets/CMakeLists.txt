@@ -3,7 +3,7 @@
 ki18n_wrap_ui(PNV_WIDGETS_UI serverblock.ui tlsblock.ui protectionblock.ui advancedblock.ui)
 add_library(pnv-widgets SHARED
     block.cpp messages.cpp serverblock.cpp tlsblock.cpp authblock.cpp protectionblock.cpp advancedblock.cpp
-    guardstatus.cpp killswitchbanner.cpp
+    guardstatus.cpp killswitchbanner.cpp importwidget.cpp
     ${PNV_WIDGETS_UI})
 generate_export_header(pnv-widgets BASE_NAME pnv_widgets)
 # GLib has members named signals and slots.

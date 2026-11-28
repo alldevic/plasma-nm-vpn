@@ -68,6 +68,7 @@ typedef enum {
     PNV_W_EXTRA_ADDRESS,      /* key, position: an IPv4 entry after the first, dropped (Ip4Config holds one) */
     PNV_W_IPV6,               /* key, position: an IPv6 entry, dropped (IPv6 in the tunnel is phase 2) */
     PNV_W_DNS_NAME,           /* key, position: a DNS entry that is not an IP address (a search domain), dropped */
+    PNV_W_TO_EXTRA,           /* key: a parameter the form lacks, carried into extra by the allowlist (6.7) */
 } PnvCode;
 
 /* The codes are grouped by origin, each group a range: the validators (2.2) and the import parsers (6.6); the
@@ -75,7 +76,7 @@ typedef enum {
 #define PNV_CODES_VALIDATOR_FIRST PNV_E_UNKNOWN_SERVICE
 #define PNV_CODES_VALIDATOR_LAST PNV_E_BAD_CHAIN
 #define PNV_CODES_PARSER_FIRST PNV_E_IMPORT_FORMAT
-#define PNV_CODES_PARSER_LAST PNV_W_DNS_NAME
+#define PNV_CODES_PARSER_LAST PNV_W_TO_EXTRA
 
 /* Never carries a value from the profile: only key names, JSON paths, positions and limits. */
 typedef struct {

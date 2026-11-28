@@ -222,6 +222,10 @@ VlessWidget::VlessWidget(const NetworkManager::VpnSetting::Ptr &setting, QWidget
              {new VlessXhttpBlock(dataDir + QStringLiteral("/xhttp-mode.list"), dataDir + QStringLiteral("/xhttp-extra.list"))});
     addGroup(i18nc("@title:group", "Protection"), {new PnvProtectionBlock(Service)});
     addGroup(i18nc("@title:group", "Advanced"), {new PnvAdvancedBlock(Service, dataDir + QStringLiteral("/vless-extra.list"))});
+    addImport({{"extra/", dataDir + QStringLiteral("/vless-extra.list")},
+               {"xhttp-extra/", dataDir + QStringLiteral("/xhttp-extra.list")},
+               {"tls-fingerprint/", dataDir + QStringLiteral("/tls-fingerprint.list")},
+               {"xhttp-mode/", dataDir + QStringLiteral("/xhttp-mode.list")}});
     finish(setting);
 }
 
