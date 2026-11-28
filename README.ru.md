@@ -153,7 +153,7 @@ plasma-nm под GPL, поэтому собранный редактор вме�
 
 | Ядро | Лицензия | Исходники |
 |------|----------|-----------|
-| [sing-box](https://github.com/SagerNet/sing-box) 1.14.5 | GPL-3.0-or-later с дополнительным условием: «In addition, no derivative work may use the name or imply association with this application without prior consent» | `sing-box-*-source.tar.xz` (с зависимостями Go) в файлах каждого релиза |
+| [sing-box](https://github.com/SagerNet/sing-box) 1.14.6 | GPL-3.0-or-later с дополнительным условием: «In addition, no derivative work may use the name or imply association with this application without prior consent» | `sing-box-*-source.tar.xz` (с зависимостями Go) в файлах каждого релиза |
 | [Xray](https://github.com/XTLS/Xray-core) 26.11.9 | MPL-2.0 | [XTLS/Xray-core](https://github.com/XTLS/Xray-core/tree/v26.11.9) |
 | [amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go) 3.1.20261116 | MIT | [amnezia-vpn/amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go) |
 | awg из [amneziawg-tools](https://github.com/amnezia-vpn/amneziawg-tools) 3.1.20260812 | GPL-2.0 | `amneziawg-tools-*-source.tar.xz` в файлах каждого релиза |

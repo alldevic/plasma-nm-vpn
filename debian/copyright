@@ -3,7 +3,7 @@ Upstream-Name: plasma-nm-vpn
 Source: https://github.com/alldevic/plasma-nm-vpn
 Comment: The core packages also ship third-party core binaries, which are not
  part of this source package:
-  - plasma-nm-vpn-sb: /usr/lib/plasma-nm-vpn/bin/sing-box, sing-box 1.14.5 from
+  - plasma-nm-vpn-sb: /usr/lib/plasma-nm-vpn/bin/sing-box, sing-box 1.14.6 from
     https://github.com/SagerNet/sing-box, unchanged release binary;
     license GPL-3+ with the additional term below (License: GPL-3+-sing-box).
   - plasma-nm-vpn-xray: /usr/lib/plasma-nm-vpn/bin/xray, Xray-core 26.11.9 from

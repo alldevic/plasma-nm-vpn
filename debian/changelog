@@ -1,6 +1,6 @@
 plasma-nm-vpn (0.1.0) unstable; urgency=medium
 
-  * Initial packaging. Cores: sing-box 1.14.5, xray 26.11.9,
+  * Initial packaging. Cores: sing-box 1.14.6, xray 26.11.9,
     amneziawg-go v3.1.20261116, awg from amneziawg-tools v3.1.20260812.
 
  -- Nikolay Bely <belyynikolay@gmail.com>  Fri, 27 Nov 2026 12:00:00 +0000
