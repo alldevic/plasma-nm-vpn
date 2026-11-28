@@ -8,6 +8,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QVBoxLayout>
 
 #include "exportdialog.h"
@@ -27,16 +28,23 @@ PnvEditorWidget::PnvEditorWidget(const QString &service, const NetworkManager::V
     , m_service(service)
 {
     // plasma-nm's dialog does not grow with the form: the groups scroll instead of being squeezed.
-    auto *scroll = new QScrollArea(this);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setWidgetResizable(true);
-    auto *content = new QWidget(scroll);
-    scroll->setWidget(content);
+    m_scroll = new QScrollArea(this);
+    m_scroll->setFrameShape(QFrame::NoFrame);
+    m_scroll->setWidgetResizable(true);
+    auto *content = new QWidget(m_scroll);
+    m_scroll->setWidget(content);
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
-    outer->addWidget(scroll);
+    outer->addWidget(m_scroll);
     m_content = new QVBoxLayout(content);
     m_content->addWidget(new PnvKillSwitchBanner(content));
+}
+
+// plasma-nm sizes the tab by this hint, between 600 and 800 pixels; a scroll area's own hint stops short of its content.
+QSize PnvEditorWidget::sizeHint() const
+{
+    return {m_scroll->widget()->sizeHint().width() + m_scroll->verticalScrollBar()->sizeHint().width(),
+            SettingWidget::sizeHint().height()};
 }
 
 void PnvEditorWidget::addGroup(const QString &title, const QList<PnvBlock *> &blocks)

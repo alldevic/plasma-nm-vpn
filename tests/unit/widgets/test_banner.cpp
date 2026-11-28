@@ -152,6 +152,9 @@ private Q_SLOTS:
         QVERIFY(b->text().contains(QLatin1String("(connecting)")));
         QCOMPARE(actionNames(b), (QStringList{QStringLiteral("clear-") + QLatin1String(One),
                                               QStringLiteral("clear-") + QLatin1String(Two), QStringLiteral("clear-all")}));
+        // The buttons share a row: a bare UUID is shortened there, so it does not widen the form.
+        const QString clearTwo = b->actions().at(1)->text();
+        QVERIFY(clearTwo.contains(QLatin1String("2222")) && !clearTwo.contains(QLatin1String(Two)));
         writeFile(status, group(One));
         b->reload();
         QCOMPARE(actionNames(b), QStringList{QStringLiteral("clear-") + QLatin1String(One)});

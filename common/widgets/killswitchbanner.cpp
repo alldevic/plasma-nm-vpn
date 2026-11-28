@@ -106,8 +106,12 @@ void PnvKillSwitchBanner::refresh()
                             i18nc("@info", "Traffic outside the VPN is blocked for:"));
     for (const PnvGuardEntry &entry : std::as_const(m_entries)) {
         text += QStringLiteral("<li>%1</li>").arg(describe(entry));
+        // The buttons share one row under the text, so a long name or a bare UUID is shortened there.
         const QString name = m_names(entry.uuid);
-        auto *action = new QAction(i18nc("@action:button", "Clear “%1”", name.isEmpty() ? entry.uuid : name), this);
+        QString shown = fontMetrics().elidedText(name.isEmpty() ? entry.uuid : name, Qt::ElideMiddle,
+                                                 fontMetrics().averageCharWidth() * 24);
+        shown.replace(QLatin1Char('&'), QStringLiteral("&&"));
+        auto *action = new QAction(i18nc("@action:button", "Clear “%1”", shown), this);
         action->setObjectName(QStringLiteral("clear-") + entry.uuid);
         connect(action, &QAction::triggered, this, [this, uuid = entry.uuid] {
             clear(uuid);

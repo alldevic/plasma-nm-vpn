@@ -13,6 +13,7 @@
 #include "settingwidget.h"
 
 class QLabel;
+class QScrollArea;
 class QVBoxLayout;
 
 QLabel *pnvBuddyLabel(const QString &text, QWidget *buddy);
@@ -27,6 +28,7 @@ public:
     void loadSecrets(const NetworkManager::Setting::Ptr &setting) override;
     QVariantMap setting() const override;
     bool isValid() const override;
+    QSize sizeHint() const override;
 
 protected:
     // A titled group of blocks, in the order of the calls.
@@ -58,6 +60,7 @@ protected:
 private:
     bool filled() const;
 
+    QScrollArea *m_scroll;
     QVBoxLayout *m_content;
     QList<PnvBlock *> m_blocks;
     QList<QPair<QString, PasswordField *>> m_secrets;
