@@ -293,8 +293,8 @@ static NMActiveConnection *own_connection(PnvSession *s)
     return own;
 }
 
-/* One call marks success; until the liveness check (5.4) it runs on ACTIVATED. It also refreshes the cached
- * server IP, which nothing writes earlier. */
+/* One call marks success, when the first liveness check passes. It also refreshes the cached server IP, which
+ * nothing writes earlier. */
 void pnv_session_succeeded(PnvSession *s)
 {
     g_autoptr(GError) error = NULL;
@@ -323,14 +323,90 @@ void pnv_session_succeeded(PnvSession *s)
         pnv_warning(s, "cannot cache the server IP: %s", error->message);
 }
 
+static guint liveness_timeout(void)
+{
+#ifdef PNV_TEST_HOOKS
+    /* The harness may raise it (6.2 holds an attempt open this way). */
+    g_autofree char *text = NULL;
+    if (g_file_get_contents("/run/pnv-test-liveness-timeout", &text, NULL, NULL) && g_ascii_strtoull(text, NULL, 10))
+        return g_ascii_strtoull(text, NULL, 10);
+#endif
+    return PNV_LIVENESS_TIMEOUT;
+}
+
+/* The profile's first DNS server, else 1.1.1.1: for a default-route tunnel the first default, with never-default
+ * the one extra destination, reached through the TUN without a route. */
+static const char *liveness_target(PnvSession *s)
+{
+    return s->profile->dns && s->profile->dns->len ? s->profile->dns->pdata[0] : "1.1.1.1";
+}
+
+static void liveness_run(PnvSession *s);
+
+static void liveness_done(PnvSession *s, gboolean ok, const char *reason)
+{
+    if (s->live_stopped)
+        return;
+    if (!s->live_succeeded) {
+        if (!ok) {
+            pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "the liveness check failed: %s", reason);
+            return;
+        }
+        s->live_succeeded = TRUE;
+        pnv_session_succeeded(s);
+        return;
+    }
+    switch (pnv_liveness_record(&s->live_failures, ok)) {
+    case PNV_LIVENESS_OK:
+        return;
+    case PNV_LIVENESS_FAILED:
+        pnv_warning(s, "liveness check %u of %d failed: %s", s->live_failures, PNV_LIVENESS_FAILURES, reason);
+        return;
+    case PNV_LIVENESS_DEAD:
+        /* Until the reconnect cycle (5.5). */
+        pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "the tunnel is dead: %d liveness checks in a row failed, "
+                    "the last: %s", PNV_LIVENESS_FAILURES, reason);
+        return;
+    }
+}
+
+static void liveness_run(PnvSession *s)
+{
+    if (s->protocol->probe)
+        s->protocol->probe(s, !s->live_succeeded, liveness_timeout(), liveness_done);
+    else
+        pnv_dns_probe(s, liveness_target(s), liveness_timeout(), liveness_done);
+}
+
+static gboolean liveness_tick(gpointer data)
+{
+    liveness_run(data);
+    return G_SOURCE_CONTINUE;
+}
+
+static void stop_liveness(PnvSession *s)
+{
+    s->live_stopped = TRUE;
+    g_clear_handle_id(&s->live_timer, g_source_remove);
+}
+
+/* Right after ACTIVATED; only its success counts as the session's success. Then every 60 s. */
+static void start_liveness(PnvSession *s)
+{
+    s->live_started = TRUE;
+    pnv_session_add_cleanup(s, "liveness check", stop_liveness);
+    liveness_run(s);
+    s->live_timer = g_timeout_add_seconds(PNV_LIVENESS_INTERVAL, liveness_tick, s);
+}
+
 /* NM tells why the VPN goes down (0.7: before Disconnect reaches the daemon); only a user's disconnect and the
  * removal of the profile count as explicit. */
 static void activation_changed(NMActiveConnection *ac G_GNUC_UNUSED, guint state, guint reason, gpointer data)
 {
     PnvSession *s = data;
 
-    if (state == NM_ACTIVE_CONNECTION_STATE_ACTIVATED && !pnv_state_get(s->run_dir, "succeeded"))
-        pnv_session_succeeded(s);
+    if (state == NM_ACTIVE_CONNECTION_STATE_ACTIVATED && !s->live_started)
+        start_liveness(s);
     if (state >= NM_ACTIVE_CONNECTION_STATE_DEACTIVATING && !s->deactivation_reason)
         s->deactivation_reason = reason;
 }

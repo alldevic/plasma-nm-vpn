@@ -31,6 +31,8 @@ struct PnvSession {
     gboolean inherited;            /* working under the chains of an earlier session, until success */
     gboolean give_up;              /* set before nm_vpn_service_plugin_failure, which calls disconnect */
     guint deactivation_reason;     /* NMActiveConnectionStateReason seen on the VPN connection, 0: none */
+    gboolean live_started, live_succeeded, live_stopped;
+    guint live_failures, live_timer;
 };
 
 /* Steps 1 and 2 of Connect (design.md, "Core supervision and cleanup"), then resolution and the TUN. */

@@ -11,6 +11,7 @@
 typedef struct PnvSession PnvSession;
 
 typedef void (*PnvCleanup)(PnvSession *session);
+typedef void (*PnvProbeDone)(PnvSession *session, gboolean ok, const char *reason);
 
 /* A list file and the prefix its entries get in the merged list (pnv_list_merge). */
 typedef struct {
@@ -25,6 +26,8 @@ typedef struct {
     guint default_mtu;             /* without mtu in the profile; 0: 1400 */
     /* The profile brings its own TUN address (AmneziaWG); without this, a /30 from the pool. */
     gboolean (*tun_address)(PnvSession *session, guint32 *address, guint *prefix);
+    /* The liveness probe; without it, a DNS query through the TUN. first: the check right after ACTIVATED. */
+    void (*probe)(PnvSession *session, gboolean first, guint timeout_s, PnvProbeDone done);
     /* The tunnel's own routes (AmneziaWG allowed-ips); without this the tunnel carries everything. */
     const GArray *(*routes)(PnvSession *session);
     /* Called once the run directory, the guard unit and the TUN exist: generates the config and calls
@@ -64,6 +67,22 @@ char *pnv_resolve_server(GResolver *resolver, const char *name, guint timeout_ms
 char *pnv_cache_read(const char *dir, const char *uuid, const char *server);
 gboolean pnv_cache_write(const char *dir, const char *uuid, const char *server, const char *ip, GError **error);
 gboolean pnv_pool_reserve(const char *uuid, const char *run_dir, guint32 *network, GError **error);
+
+/* The liveness check (liveness.c). */
+#define PNV_LIVENESS_INTERVAL 60 /* s between periodic checks */
+#define PNV_LIVENESS_TIMEOUT 15  /* s for one check, compiled in; the test build may override it */
+#define PNV_LIVENESS_FAILURES 3  /* in a row: the tunnel is dead */
+
+typedef enum {
+    PNV_LIVENESS_OK,
+    PNV_LIVENESS_FAILED,
+    PNV_LIVENESS_DEAD,
+} PnvLivenessAction;
+
+PnvLivenessAction pnv_liveness_record(guint *failures, gboolean passed);
+guint pnv_awg_age_threshold(guint rekey_after_time);
+guint pnv_awg_detection_bound(guint rekey_after_time);
+void pnv_dns_probe(PnvSession *session, const char *target, guint timeout_s, PnvProbeDone done);
 
 /* Ip4Config (ip4plan.c): routes (PnvCidr4) never include 0.0.0.0/0; never_default asks NM not to route the
  * default through the tunnel; dns are IPv4 literals. */

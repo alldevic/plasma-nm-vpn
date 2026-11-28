@@ -14,10 +14,8 @@
 #define DATA_DIR "/usr/share/plasma-nm-vpn/amneziawg"
 #define AWG PNV_CORE_DIR "/awg"
 #define SOCKET_WAIT_MS 15000
-#define HANDSHAKE_WAIT_S 15
 
 static const char *const read_write[] = {"/run/amneziawg", NULL};
-static guint handshake_watch;
 
 static gboolean awg_tun_address(PnvSession *session, guint32 *address, guint *prefix)
 {
@@ -46,11 +44,6 @@ static void remove_socket(PnvSession *session)
 {
     g_autofree char *sock = pnv_uapi_socket(pnv_session_tun(session));
     g_unlink(sock);
-}
-
-static void stop_handshake_watch(PnvSession *session G_GNUC_UNUSED)
-{
-    g_clear_handle_id(&handshake_watch, g_source_remove);
 }
 
 /* The latest handshake of the (single) peer, seconds since the epoch; 0 for none, -1 if awg fails. */
@@ -88,30 +81,78 @@ static gboolean pnv_awg_nudge(PnvSession *session)
     return ok;
 }
 
-/* Until the liveness check (5.4) only logged: the first handshake, or none after the allotted time. */
-static gboolean watch_handshake(gpointer data)
-{
-    static guint ticks;
-    static gboolean nudged;
-    PnvSession *session = data;
-    const char *tun = pnv_session_tun(session);
-    gint64 latest = pnv_awg_latest_handshake(tun);
+/* The liveness probe (5.4). The first check waits for the first handshake, nudging after 2 s; a periodic one
+ * nudges (WireGuard renews handshakes only with traffic), waits 5 s and compares the handshake age with the
+ * threshold from the profile's RekeyAfterTime. */
+typedef struct {
+    PnvSession *session;
+    PnvProbeDone done;
+    gboolean first, nudged;
+    guint ticks, timeout_s;
+} Probe;
 
-    if (latest > 0) {
-        pnv_message(session, "first handshake after %u s%s", ticks, nudged ? " (nudged)" : "");
-        handshake_watch = 0;
-        return G_SOURCE_REMOVE;
+static guint rekey_after_time(PnvSession *session)
+{
+    const GPtrArray *params = pnv_session_profile(session)->amneziawg.params;
+
+    for (guint i = 0; params && i < params->len; i++) {
+        const PnvAwgParam *param = params->pdata[i];
+        if (g_str_equal(param->key, "RekeyAfterTime")) {
+            const char *dash = strchr(param->value, '-');
+            return g_ascii_strtoull(dash ? dash + 1 : param->value, NULL, 10);
+        }
     }
-    if (!nudged && ticks >= 2 && (if_nametoindex(tun) != 0)) {
-        nudged = pnv_awg_nudge(session);
-        pnv_debug(session, "no handshake yet: nudge %s", nudged ? "sent" : "failed");
+    return 120;
+}
+
+static gboolean probe_tick(gpointer data)
+{
+    Probe *p = data;
+    const char *tun = pnv_session_tun(p->session);
+    gint64 latest = pnv_awg_latest_handshake(tun);
+    g_autofree char *reason = NULL;
+
+    if (p->first) {
+        if (latest > 0) {
+            pnv_message(p->session, "first handshake after %u s%s", p->ticks, p->nudged ? " (nudged)" : "");
+            p->done(p->session, TRUE, NULL);
+            g_free(p);
+            return G_SOURCE_REMOVE;
+        }
+        if (!p->nudged && p->ticks >= 2 && if_nametoindex(tun) != 0)
+            p->nudged = pnv_awg_nudge(p->session);
+        if (++p->ticks <= p->timeout_s)
+            return G_SOURCE_CONTINUE;
+        reason = g_strdup_printf("no handshake within %u s", p->timeout_s);
+    } else {
+        guint threshold = pnv_awg_age_threshold(rekey_after_time(p->session));
+        gint64 age = latest > 0 ? g_get_real_time() / G_USEC_PER_SEC - latest : -1;
+
+        if (latest > 0 && age <= threshold) {
+            p->done(p->session, TRUE, NULL);
+            g_free(p);
+            return G_SOURCE_REMOVE;
+        }
+        reason = latest > 0 ? g_strdup_printf("the last handshake is %" G_GINT64_FORMAT " s old (threshold %u s)", age,
+                                              threshold)
+                            : g_strdup("no handshake at all");
     }
-    if (++ticks > HANDSHAKE_WAIT_S) {
-        pnv_warning(session, "no handshake within %d s", HANDSHAKE_WAIT_S);
-        handshake_watch = 0;
-        return G_SOURCE_REMOVE;
+    p->done(p->session, FALSE, reason);
+    g_free(p);
+    return G_SOURCE_REMOVE;
+}
+
+static void awg_probe(PnvSession *session, gboolean first, guint timeout_s, PnvProbeDone done)
+{
+    Probe *p = g_new0(Probe, 1);
+
+    *p = (Probe){session, done, first, FALSE, 0, timeout_s};
+    if (first) {
+        g_timeout_add_seconds(1, probe_tick, p);
+        return;
     }
-    return G_SOURCE_CONTINUE;
+    p->nudged = pnv_awg_nudge(session);
+    g_timeout_add_seconds(5, probe_tick, p);
 }
 
 static gboolean setconf(PnvSession *session, GError **error)
@@ -161,11 +202,7 @@ static gboolean awg_connect(PnvSession *session, GError **error)
         }
         g_usleep(100 * 1000);
     }
-    if (!setconf(session, error))
-        return FALSE;
-    pnv_session_add_cleanup(session, "handshake watch", stop_handshake_watch);
-    handshake_watch = g_timeout_add_seconds(1, watch_handshake, session);
-    return TRUE;
+    return setconf(session, error);
 }
 
 static const PnvProtocol amneziawg = {
@@ -175,6 +212,7 @@ static const PnvProtocol amneziawg = {
     .default_mtu = 1420,
     .tun_address = awg_tun_address,
     .routes = awg_routes,
+    .probe = awg_probe,
     .connect = awg_connect,
 };
 
