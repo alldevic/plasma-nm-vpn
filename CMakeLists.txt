@@ -61,6 +61,8 @@ if(BUILD_EDITORS)
     include(GenerateExportHeader)
     include(${PROJECT_SOURCE_DIR}/cmake/PnvEditor.cmake)
     add_subdirectory(common/widgets)
+    # The catalogs of po/<lang>/plasma-nm-vpn.po (scripts/extract-messages), into plasma-nm-vpn-common.
+    ki18n_install(po)
     add_subdirectory(common/editor)
     add_subdirectory(backends/sb/editor)
     add_subdirectory(backends/xray/editor)

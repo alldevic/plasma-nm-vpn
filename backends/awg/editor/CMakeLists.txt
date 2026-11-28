@@ -1,8 +1,7 @@
-# Russian strings are placeholders until 7.1.
 pnv_editor_metadata(${CMAKE_CURRENT_BINARY_DIR}/plasmanetworkmanagement_pnv_amneziawgui.json
     SERVICE org.freedesktop.NetworkManager.pnv.amneziawg
-    NAME "AmneziaWG" DESCRIPTION "AmneziaWG (plasma-nm-vpn)"
-    NAME_RU "AmneziaWG" DESCRIPTION_RU "AmneziaWG (plasma-nm-vpn)")
+    NAME "AmneziaWG" DESCRIPTION "AmneziaWG VPN connection (plasma-nm-vpn)"
+    NAME_RU "AmneziaWG" DESCRIPTION_RU "VPN-соединение AmneziaWG (plasma-nm-vpn)")
 add_library(pnv-awg-editor STATIC awgwidget.cpp)
 set_target_properties(pnv-awg-editor PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(pnv-awg-editor PRIVATE TRANSLATION_DOMAIN="plasma-nm-vpn")

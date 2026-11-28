@@ -1,0 +1,43 @@
+#!/bin/bash
+# extract-messages: the UI strings into po/plasma-nm-vpn.pot, KDE-style (design.md, "Translations"). xgettext runs with
+# the ki18n keywords over the editors, the shared widgets and the message table; the strings of the .ui files are
+# first turned into i18nc calls, as KDE's extractrc does. Then each po/<lang>/plasma-nm-vpn.po is merged with the
+# template. Needs gettext and python3.
+set -euo pipefail
+
+root=$(readlink -f "$(dirname "$0")/..")
+cd "$root"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+python3 - common/widgets/*.ui > "$tmp/rc.cpp" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+def c(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+
+for path in sys.argv[1:]:
+    for s in ET.parse(path).iter("string"):
+        if not s.text or s.get("notr") == "true":
+            continue
+        print(f"// {path}")
+        ctx = s.get("comment")
+        print(f"i18nc({c(ctx)}, {c(s.text)});" if ctx else f"i18n({c(s.text)});")
+PY
+
+sources=$(git ls-files 'common/widgets/*.cpp' 'common/editor/*.cpp' 'backends/*/editor/*.cpp')
+xgettext --from-code=UTF-8 -C --kde -ci18n --package-name=plasma-nm-vpn --msgid-bugs-address=https://github.com/alldevic/plasma-nm-vpn/issues \
+  -ki18n:1 -ki18nc:1c,2 -ki18np:1,2 -ki18ncp:1c,2,3 \
+  -kki18n:1 -kki18nc:1c,2 -kki18np:1,2 -kki18ncp:1c,2,3 \
+  -kkli18n:1 -kkli18nc:1c,2 -kkli18np:1,2 -kkli18ncp:1c,2,3 \
+  -kxi18n:1 -kxi18nc:1c,2 -kI18N_NOOP:1 -kI18NC_NOOP:1c,2 \
+  -o po/plasma-nm-vpn.pot $sources "$tmp/rc.cpp"
+# The temporary file's name is no use to a translator.
+sed -i "s|$tmp/rc.cpp|common/widgets/*.ui|" po/plasma-nm-vpn.pot
+
+for po in po/*/plasma-nm-vpn.po; do
+  [ -e "$po" ] || continue
+  msgmerge --quiet --update --backup=none "$po" po/plasma-nm-vpn.pot
+done
+msgfmt --check --statistics -o /dev/null po/*/plasma-nm-vpn.po 2>&1 || true

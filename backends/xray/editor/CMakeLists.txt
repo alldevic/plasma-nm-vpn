@@ -1,8 +1,7 @@
-# Russian strings are placeholders until 7.1.
 pnv_editor_metadata(${CMAKE_CURRENT_BINARY_DIR}/plasmanetworkmanagement_pnv_vlessui.json
     SERVICE org.freedesktop.NetworkManager.pnv.vless
-    NAME "VLESS XHTTP Reality" DESCRIPTION "VLESS XHTTP Reality (plasma-nm-vpn)"
-    NAME_RU "VLESS XHTTP Reality" DESCRIPTION_RU "VLESS XHTTP Reality (plasma-nm-vpn)")
+    NAME "VLESS XHTTP Reality" DESCRIPTION "VLESS XHTTP Reality VPN connection (plasma-nm-vpn)"
+    NAME_RU "VLESS XHTTP Reality" DESCRIPTION_RU "VPN-соединение VLESS XHTTP Reality (plasma-nm-vpn)")
 add_library(pnv-vless-editor STATIC vlesswidget.cpp)
 set_target_properties(pnv-vless-editor PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(pnv-vless-editor PRIVATE TRANSLATION_DOMAIN="plasma-nm-vpn")

@@ -1,0 +1,984 @@
+# Russian translation of plasma-nm-vpn.
+# This file is distributed under the same license as the plasma-nm-vpn package (MIT).
+msgid ""
+msgstr ""
+"Project-Id-Version: plasma-nm-vpn\n"
+"Report-Msgid-Bugs-To: https://github.com/alldevic/plasma-nm-vpn/issues\n"
+"PO-Revision-Date: 2026-11-28 15:00+0000\n"
+"Last-Translator: plasma-nm-vpn\n"
+"Language-Team: Russian\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+
+#: backends/awg/editor/awgwidget.cpp:75
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "One IPv4 address with its prefix, for example 10.8.0.2/32"
+msgstr "Один IPv4-адрес с префиксом, например 10.8.0.2/32"
+
+#: backends/awg/editor/awgwidget.cpp:77
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Address:"
+msgstr "Адрес:"
+
+#: backends/awg/editor/awgwidget.cpp:112
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Base64"
+msgstr "Base64"
+
+#: backends/awg/editor/awgwidget.cpp:113
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "0.0.0.0/0 for all traffic, or IPv4 subnets"
+msgstr "0.0.0.0/0 для всего трафика или подсети IPv4"
+
+#: backends/awg/editor/awgwidget.cpp:114
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Seconds; off when empty"
+msgstr "Секунды; пусто — выключено"
+
+#: backends/awg/editor/awgwidget.cpp:116
+#: backends/xray/editor/vlesswidget.cpp:124
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Public key:"
+msgstr "Открытый ключ:"
+
+#: backends/awg/editor/awgwidget.cpp:117
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Allowed IPs:"
+msgstr "Разрешённые IP:"
+
+#: backends/awg/editor/awgwidget.cpp:118
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Keepalive:"
+msgstr "Keepalive:"
+
+#: backends/awg/editor/awgwidget.cpp:202
+#, kde-format
+msgctxt "@action:button"
+msgid "Add Parameter"
+msgstr "Добавить параметр"
+
+#: backends/awg/editor/awgwidget.cpp:234
+#, kde-format
+msgctxt "@info:tooltip"
+msgid "Remove this parameter"
+msgstr "Удалить этот параметр"
+
+#: backends/awg/editor/awgwidget.cpp:334
+#, kde-format
+msgctxt "@title:group"
+msgid "Interface"
+msgstr "Интерфейс"
+
+#: backends/awg/editor/awgwidget.cpp:335 backends/awg/editor/awgwidget.cpp:369
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Private key:"
+msgstr "Закрытый ключ:"
+
+#: backends/awg/editor/awgwidget.cpp:336
+#, kde-format
+msgctxt "@title:group"
+msgid "Peer"
+msgstr "Пир"
+
+#: backends/awg/editor/awgwidget.cpp:338 backends/awg/editor/awgwidget.cpp:370
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Preshared key:"
+msgstr "Общий ключ (PSK):"
+
+#: backends/awg/editor/awgwidget.cpp:339
+#, kde-format
+msgctxt "@title:group"
+msgid "AmneziaWG parameters"
+msgstr "Параметры AmneziaWG"
+
+#: backends/awg/editor/awgwidget.cpp:340 backends/awg/editor/awgwidget.cpp:371
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Header protection key:"
+msgstr "Ключ защиты заголовков:"
+
+#: backends/awg/editor/awgwidget.cpp:342
+#: backends/sb/editor/hysteria2widget.cpp:127
+#: backends/xray/editor/vlesswidget.cpp:223
+#, kde-format
+msgctxt "@title:group"
+msgid "Protection"
+msgstr "Защита"
+
+#: backends/awg/editor/awgwidget.cpp:343
+#: backends/sb/editor/hysteria2widget.cpp:128
+#: backends/xray/editor/vlesswidget.cpp:224
+#, kde-format
+msgctxt "@title:group"
+msgid "Advanced"
+msgstr "Дополнительно"
+
+#: backends/awg/editor/awgwidget.cpp:354
+#, kde-format
+msgctxt "@info"
+msgid ""
+"Allowed IPs do not include 0.0.0.0/0, so not all traffic goes through the VPN"
+msgstr "Разрешённые IP не включают 0.0.0.0/0, поэтому не весь трафик идёт через VPN"
+
+#: backends/sb/editor/hysteria2widget.cpp:33
+#, kde-format
+msgctxt "@item:inlistbox no obfuscation"
+msgid "None"
+msgstr "Нет"
+
+#: backends/sb/editor/hysteria2widget.cpp:36
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Seconds; the core's default when empty"
+msgstr "Секунды; пусто — значение ядра по умолчанию"
+
+#: backends/sb/editor/hysteria2widget.cpp:39
+#: backends/sb/editor/hysteria2widget.cpp:40
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Not set"
+msgstr "Не задано"
+
+#: backends/sb/editor/hysteria2widget.cpp:43
+#, kde-format
+msgctxt "@label:listbox"
+msgid "Obfuscation:"
+msgstr "Обфускация:"
+
+#: backends/sb/editor/hysteria2widget.cpp:44
+#: backends/sb/editor/hysteria2widget.cpp:142
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Obfuscation password:"
+msgstr "Пароль обфускации:"
+
+#: backends/sb/editor/hysteria2widget.cpp:46
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Port hopping interval:"
+msgstr "Интервал смены портов:"
+
+#: backends/sb/editor/hysteria2widget.cpp:47
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Upload, Mbit/s:"
+msgstr "Отдача, Мбит/с:"
+
+#: backends/sb/editor/hysteria2widget.cpp:48
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Download, Mbit/s:"
+msgstr "Загрузка, Мбит/с:"
+
+#: backends/sb/editor/hysteria2widget.cpp:109
+#, kde-format
+msgctxt "@label"
+msgid "Obfuscation"
+msgstr "Обфускация"
+
+#: backends/sb/editor/hysteria2widget.cpp:122
+#: backends/xray/editor/vlesswidget.cpp:217
+#, kde-format
+msgctxt "@title:group"
+msgid "Server"
+msgstr "Сервер"
+
+#: backends/sb/editor/hysteria2widget.cpp:123
+#: backends/xray/editor/vlesswidget.cpp:218
+#, kde-format
+msgctxt "@title:group"
+msgid "Authentication"
+msgstr "Аутентификация"
+
+#: backends/sb/editor/hysteria2widget.cpp:123
+#: backends/sb/editor/hysteria2widget.cpp:141
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Password:"
+msgstr "Пароль:"
+
+#: backends/sb/editor/hysteria2widget.cpp:125
+#, kde-format
+msgctxt "@title:group"
+msgid "TLS"
+msgstr "TLS"
+
+#: backends/sb/editor/hysteria2widget.cpp:126
+#, kde-format
+msgctxt "@title:group"
+msgid "Obfuscation, port hopping"
+msgstr "Обфускация, смена портов"
+
+#: backends/xray/editor/vlesswidget.cpp:83
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "none, or a VLESS Encryption (ML-KEM) key"
+msgstr "none или ключ VLESS Encryption (ML-KEM)"
+
+#: backends/xray/editor/vlesswidget.cpp:87
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Encryption:"
+msgstr "Шифрование:"
+
+#: backends/xray/editor/vlesswidget.cpp:118
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "The site the server borrows its TLS from"
+msgstr "Сайт, у которого сервер заимствует TLS"
+
+#: backends/xray/editor/vlesswidget.cpp:119
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "The server's public key, base64url"
+msgstr "Открытый ключ сервера, base64url"
+
+#: backends/xray/editor/vlesswidget.cpp:120
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Hex, up to 16 digits; may be empty"
+msgstr "Hex, до 16 цифр; может быть пустым"
+
+#: backends/xray/editor/vlesswidget.cpp:123 common/widgets/*.ui:26
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Server name (SNI):"
+msgstr "Имя сервера (SNI):"
+
+#: backends/xray/editor/vlesswidget.cpp:125
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Short ID:"
+msgstr "Short ID:"
+
+#: backends/xray/editor/vlesswidget.cpp:126
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Spider path:"
+msgstr "Путь spider:"
+
+#: backends/xray/editor/vlesswidget.cpp:127 common/widgets/*.ui:34
+#, kde-format
+msgctxt "@label:listbox"
+msgid "Fingerprint:"
+msgstr "Отпечаток:"
+
+#: backends/xray/editor/vlesswidget.cpp:173 common/widgets/*.ui:28
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "The server address"
+msgstr "Адрес сервера"
+
+#: backends/xray/editor/vlesswidget.cpp:174
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "XHTTP settings, for example {\"xPaddingBytes\": \"100-1000\"}"
+msgstr "Настройки XHTTP, например {\"xPaddingBytes\": \"100-1000\"}"
+
+#: backends/xray/editor/vlesswidget.cpp:176
+#, kde-format
+msgctxt "@label:listbox"
+msgid "Mode:"
+msgstr "Режим:"
+
+#: backends/xray/editor/vlesswidget.cpp:177
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Path:"
+msgstr "Путь:"
+
+#: backends/xray/editor/vlesswidget.cpp:178
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Host:"
+msgstr "Хост:"
+
+#: backends/xray/editor/vlesswidget.cpp:179
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Additional XHTTP parameters (JSON):"
+msgstr "Дополнительные параметры XHTTP (JSON):"
+
+#: backends/xray/editor/vlesswidget.cpp:219
+#: backends/xray/editor/vlesswidget.cpp:234
+#, kde-format
+msgctxt "@label:textbox"
+msgid "UUID:"
+msgstr "UUID:"
+
+#: backends/xray/editor/vlesswidget.cpp:220
+#, kde-format
+msgctxt "@title:group"
+msgid "Reality"
+msgstr "Reality"
+
+#: backends/xray/editor/vlesswidget.cpp:221
+#, kde-format
+msgctxt "@title:group"
+msgid "XHTTP transport"
+msgstr "Транспорт XHTTP"
+
+#: common/editor/pnv-editor.cpp:87
+#, kde-format
+msgctxt "@title:group"
+msgid "Import and Export"
+msgstr "Импорт и экспорт"
+
+#: common/editor/pnv-editor.cpp:93
+#, kde-format
+msgctxt "@action:button"
+msgid "Export…"
+msgstr "Экспорт…"
+
+#: common/editor/pnv-editor.cpp:141
+#, kde-format
+msgctxt "@title:window"
+msgid "Replace the Fields?"
+msgstr "Заменить поля?"
+
+#: common/editor/pnv-editor.cpp:142
+#, kde-format
+msgctxt "@info"
+msgid "The imported settings replace the ones in the form."
+msgstr "Импортированные настройки заменят те, что в форме."
+
+#: common/widgets/exportdialog.cpp:80
+#, kde-format
+msgctxt "@option:check"
+msgid "Include secrets"
+msgstr "Включить секреты"
+
+#: common/widgets/exportdialog.cpp:83
+#, kde-format
+msgctxt "@title:window"
+msgid "Export %1"
+msgstr "Экспорт %1"
+
+#: common/widgets/exportdialog.cpp:85
+#, kde-format
+msgctxt "@info"
+msgid "A link copied with its secrets may stay in the clipboard history."
+msgstr "Ссылка, скопированная вместе с секретами, может остаться в истории буфера обмена."
+
+#: common/widgets/exportdialog.cpp:93
+#, kde-format
+msgctxt "@action:button"
+msgid "Copy to Clipboard"
+msgstr "Копировать в буфер обмена"
+
+#: common/widgets/exportdialog.cpp:96
+#, kde-format
+msgctxt "@action:button"
+msgid "Save to File…"
+msgstr "Сохранить в файл…"
+
+#: common/widgets/exportdialog.cpp:115
+#, kde-format
+msgctxt "@item:inlistbox file filter"
+msgid "Configuration (*.conf)"
+msgstr "Конфигурация (*.conf)"
+
+#: common/widgets/exportdialog.cpp:115
+#, kde-format
+msgctxt "@item:inlistbox file filter"
+msgid "Text (*.txt)"
+msgstr "Текст (*.txt)"
+
+#: common/widgets/exportdialog.cpp:130
+#, kde-format
+msgctxt "@info"
+msgid "Not in the export:"
+msgstr "Не вошло в экспорт:"
+
+#: common/widgets/exportdialog.cpp:143
+#, kde-format
+msgctxt "@info"
+msgid "Cannot write %1: %2"
+msgstr "Не удалось записать %1: %2"
+
+#: common/widgets/importwidget.cpp:24
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Paste a link or a configuration here"
+msgstr "Вставьте сюда ссылку или конфигурацию"
+
+#: common/widgets/importwidget.cpp:27
+#, kde-format
+msgctxt "@action:button"
+msgid "Import"
+msgstr "Импортировать"
+
+#: common/widgets/importwidget.cpp:30
+#, kde-format
+msgctxt "@action:button"
+msgid "Open File…"
+msgstr "Открыть файл…"
+
+#: common/widgets/importwidget.cpp:51
+#, kde-format
+msgctxt "@title:window"
+msgid "Open a Link or Configuration"
+msgstr "Открыть ссылку или конфигурацию"
+
+#: common/widgets/importwidget.cpp:52
+#, kde-format
+msgctxt "@item:inlistbox file filter"
+msgid "All files (*)"
+msgstr "Все файлы (*)"
+
+#: common/widgets/importwidget.cpp:103
+#, kde-format
+msgctxt "@info"
+msgid "Cannot read %1: %2"
+msgstr "Не удалось прочитать %1: %2"
+
+#: common/widgets/importwidget.cpp:120
+#, kde-format
+msgctxt "@info"
+msgid "This is a %1 connection: add it as “%1” in the list of VPN types."
+msgstr "Это соединение %1: добавьте его как «%1» в списке типов VPN."
+
+#: common/widgets/importwidget.cpp:135
+#, kde-format
+msgctxt "@info"
+msgid "Nothing was imported:"
+msgstr "Ничего не импортировано:"
+
+#: common/widgets/importwidget.cpp:155
+#, kde-format
+msgctxt "@info"
+msgid "Imported. Check the fields before saving."
+msgstr "Импортировано. Проверьте поля перед сохранением."
+
+#: common/widgets/importwidget.cpp:157
+#, kde-format
+msgctxt "@info"
+msgid "Imported, with these changes:"
+msgstr "Импортировано со следующими изменениями:"
+
+#: common/widgets/killswitchbanner.cpp:75
+#, kde-format
+msgctxt "@info why a block stayed"
+msgid "the connection could not be restored"
+msgstr "соединение не удалось восстановить"
+
+#: common/widgets/killswitchbanner.cpp:77
+#, kde-format
+msgctxt "@info why a block stayed"
+msgid "the VPN service stopped unexpectedly"
+msgstr "служба VPN неожиданно остановилась"
+
+#: common/widgets/killswitchbanner.cpp:79
+#, kde-format
+msgctxt "@info why a block stayed"
+msgid "the last connection attempt did not succeed"
+msgstr "последняя попытка подключения не удалась"
+
+#: common/widgets/killswitchbanner.cpp:81
+#, kde-format
+msgctxt "@info profile name, reason"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: common/widgets/killswitchbanner.cpp:84
+#, kde-format
+msgctxt "@info a block, the time it began"
+msgid "%1, since %2"
+msgstr "%1, с %2"
+
+#: common/widgets/killswitchbanner.cpp:88
+#, kde-format
+msgctxt "@info a block"
+msgid "%1 (connecting)"
+msgstr "%1 (подключается)"
+
+#: common/widgets/killswitchbanner.cpp:90
+#, kde-format
+msgctxt "@info a block"
+msgid "%1 (connected)"
+msgstr "%1 (подключено)"
+
+#: common/widgets/killswitchbanner.cpp:105
+#, kde-format
+msgctxt "@title"
+msgid "Kill switch block active"
+msgstr "Действует блокировка kill switch"
+
+#: common/widgets/killswitchbanner.cpp:106
+#, kde-format
+msgctxt "@info"
+msgid "Traffic outside the VPN is blocked for:"
+msgstr "Трафик в обход VPN заблокирован для:"
+
+#: common/widgets/killswitchbanner.cpp:110
+#, kde-format
+msgctxt "@action:button"
+msgid "Clear “%1”"
+msgstr "Снять «%1»"
+
+#: common/widgets/killswitchbanner.cpp:119
+#, kde-format
+msgctxt "@action:button"
+msgid "Clear All"
+msgstr "Снять все"
+
+#: common/widgets/killswitchbanner.cpp:121
+#, kde-format
+msgctxt "@info:tooltip"
+msgid "Connections that are connected or connecting keep their block"
+msgstr "Подключённые и подключающиеся соединения сохраняют свою блокировку"
+
+#: common/widgets/killswitchbanner.cpp:144
+#, kde-format
+msgctxt "@info"
+msgid "The block was not cleared: authentication was refused or failed."
+msgstr "Блокировка не снята: аутентификация отклонена или не удалась."
+
+#: common/widgets/killswitchbanner.cpp:153
+#, kde-format
+msgctxt "@info"
+msgid "The block was not cleared: %1 could not be started."
+msgstr "Блокировка не снята: не удалось запустить %1."
+
+#: common/widgets/messages.cpp:18
+#, kde-format
+msgctxt "@info"
+msgid "The VPN type %1 is not known"
+msgstr "Тип VPN %1 неизвестен"
+
+#: common/widgets/messages.cpp:19
+#, kde-format
+msgctxt "@info"
+msgid ""
+"The profile is from a newer version of plasma-nm-vpn (this one knows schema "
+"%1)"
+msgstr "Профиль создан более новой версией plasma-nm-vpn (эта знает схему %1)"
+
+#: common/widgets/messages.cpp:20
+#, kde-format
+msgctxt "@info"
+msgid "Unknown setting %1"
+msgstr "Неизвестный параметр %1"
+
+#: common/widgets/messages.cpp:21
+#, kde-format
+msgctxt "@info"
+msgid "Unknown secret %1"
+msgstr "Неизвестный секрет %1"
+
+#: common/widgets/messages.cpp:22
+#, kde-format
+msgctxt "@info"
+msgid "%1: required"
+msgstr "%1: обязательное поле"
+
+#: common/widgets/messages.cpp:23
+#, kde-format
+msgctxt "@info"
+msgid "%1: invalid text at position %2"
+msgstr "%1: недопустимый текст в позиции %2"
+
+#: common/widgets/messages.cpp:24
+#, kde-format
+msgctxt "@info"
+msgid "%1: control character at position %2"
+msgstr "%1: управляющий символ в позиции %2"
+
+#: common/widgets/messages.cpp:25
+#, kde-format
+msgctxt "@info"
+msgid "%1: longer than %2 bytes"
+msgstr "%1: длиннее %2 байт"
+
+#: common/widgets/messages.cpp:26
+#, kde-format
+msgctxt "@info"
+msgid "%1: empty"
+msgstr "%1: пусто"
+
+#: common/widgets/messages.cpp:27
+#, kde-format
+msgctxt "@info"
+msgid "%1: not a host name or IP address (position %2)"
+msgstr "%1: не имя хоста и не IP-адрес (позиция %2)"
+
+#: common/widgets/messages.cpp:28
+#, kde-format
+msgctxt "@info"
+msgid "%1: not a port from %2 to %3"
+msgstr "%1: не номер порта от %2 до %3"
+
+#: common/widgets/messages.cpp:29
+#, kde-format
+msgctxt "@info"
+msgid "%1: not a list of ports and port ranges (position %2)"
+msgstr "%1: не список портов и диапазонов портов (позиция %2)"
+
+#: common/widgets/messages.cpp:30
+#, kde-format
+msgctxt "@info"
+msgid "%1: a port range starts after its end (position %2)"
+msgstr "%1: диапазон портов начинается после своего конца (позиция %2)"
+
+#: common/widgets/messages.cpp:31
+#, kde-format
+msgctxt "@info"
+msgid "%1: not a number"
+msgstr "%1: не число"
+
+#: common/widgets/messages.cpp:32
+#, kde-format
+msgctxt "@info"
+msgid "%1: not from %2 to %3"
+msgstr "%1: не в пределах от %2 до %3"
+
+#: common/widgets/messages.cpp:33
+#, kde-format
+msgctxt "@info"
+msgid "%1: must be yes or no"
+msgstr "%1: должно быть yes или no"
+
+#: common/widgets/messages.cpp:34
+#, kde-format
+msgctxt "@info"
+msgid "%1: not one of the choices"
+msgstr "%1: нет среди вариантов"
+
+#: common/widgets/messages.cpp:35
+#, kde-format
+msgctxt "@info"
+msgid "%1: not valid base64 (position %2)"
+msgstr "%1: некорректный base64 (позиция %2)"
+
+#: common/widgets/messages.cpp:36
+#, kde-format
+msgctxt "@info"
+msgid "%1: not valid hex (position %2)"
+msgstr "%1: некорректный hex (позиция %2)"
+
+#: common/widgets/messages.cpp:37
+#, kde-format
+msgctxt "@info"
+msgid "%1: must be %2 bytes long"
+msgstr "%1: должно быть длиной %2 байт"
+
+#: common/widgets/messages.cpp:38
+#, kde-format
+msgctxt "@info"
+msgid "%1: entry %2 is not an IPv4 address"
+msgstr "%1: элемент %2 не является IPv4-адресом"
+
+#: common/widgets/messages.cpp:39
+#, kde-format
+msgctxt "@info"
+msgid "%1: entry %2 is not an IPv4 address or subnet"
+msgstr "%1: элемент %2 не является IPv4-адресом или подсетью"
+
+#: common/widgets/messages.cpp:40
+#, kde-format
+msgctxt "@info"
+msgid "%1: more than %2 entries"
+msgstr "%1: больше %2 элементов"
+
+#: common/widgets/messages.cpp:41
+#, kde-format
+msgctxt "@info"
+msgid "%1: entry %2 is not an ALPN protocol name"
+msgstr "%1: элемент %2 не является именем протокола ALPN"
+
+#: common/widgets/messages.cpp:42
+#, kde-format
+msgctxt "@info"
+msgid "%1: the secret flags must be from %2 to %3"
+msgstr "%1: флаги секрета должны быть от %2 до %3"
+
+#: common/widgets/messages.cpp:43
+#, kde-format
+msgctxt "@info"
+msgid "%1: not valid JSON"
+msgstr "%1: некорректный JSON"
+
+#: common/widgets/messages.cpp:44
+#, kde-format
+msgctxt "@info"
+msgid "%1: must be a JSON object"
+msgstr "%1: должен быть объектом JSON"
+
+#: common/widgets/messages.cpp:45
+#, kde-format
+msgctxt "@info"
+msgid "%1: nested deeper than %2 levels"
+msgstr "%1: вложенность глубже %2 уровней"
+
+#: common/widgets/messages.cpp:46
+#, kde-format
+msgctxt "@info"
+msgid "%1: %2 is never allowed"
+msgstr "%1: %2 не допускается никогда"
+
+#: common/widgets/messages.cpp:47
+#, kde-format
+msgctxt "@info"
+msgid "%1: %2 is not supported with this core version"
+msgstr "%1: %2 не поддерживается этой версией ядра"
+
+#: common/widgets/messages.cpp:48
+#, kde-format
+msgctxt "@info"
+msgid "%1: %2 has a value of a kind that is not allowed"
+msgstr "%1: у %2 значение недопустимого вида"
+
+#: common/widgets/messages.cpp:49
+#, kde-format
+msgctxt "@info"
+msgid "Cannot read %1 of the core package"
+msgstr "Не удалось прочитать %1 из пакета ядра"
+
+#: common/widgets/messages.cpp:50
+#, kde-format
+msgctxt "@info"
+msgid "%1 of the core package has a bad entry on line %2"
+msgstr "В %1 из пакета ядра ошибочная запись в строке %2"
+
+#: common/widgets/messages.cpp:51
+#, kde-format
+msgctxt "@info"
+msgid "%1: must start with / and have no spaces"
+msgstr "%1: должно начинаться с / и не содержать пробелов"
+
+#: common/widgets/messages.cpp:52
+#, kde-format
+msgctxt "@info"
+msgid "%1: must be none or a VLESS Encryption key"
+msgstr "%1: должно быть none или ключом VLESS Encryption"
+
+#: common/widgets/messages.cpp:53
+#, kde-format
+msgctxt "@info"
+msgid ""
+"%1: a tag chain cannot hold the characters # = [ ] or control characters"
+msgstr "%1: цепочка тегов не может содержать символы # = [ ] и управляющие символы"
+
+#: common/widgets/messages.cpp:55
+msgctxt "@info"
+msgid ""
+"This is not a hysteria2://, hy2:// or vless:// link nor an AmneziaWG "
+"configuration"
+msgstr "Это не ссылка hysteria2://, hy2:// или vless:// и не конфигурация AmneziaWG"
+
+#: common/widgets/messages.cpp:56
+#, kde-format
+msgctxt "@info"
+msgid "The text to import is larger than %1 bytes"
+msgstr "Текст для импорта больше %1 байт"
+
+#: common/widgets/messages.cpp:57
+#, kde-format
+msgctxt "@info"
+msgid "%1 is not supported in this version"
+msgstr "%1 не поддерживается в этой версии"
+
+#: common/widgets/messages.cpp:58
+#, kde-format
+msgctxt "@info the part of a link: host, port, path…"
+msgid "The link has a malformed %1"
+msgstr "В ссылке неверно указан элемент: %1"
+
+#: common/widgets/messages.cpp:59
+#, kde-format
+msgctxt "@info"
+msgid "The link's %1 is not supported: only XHTTP transport with Reality is"
+msgstr "%1 в ссылке не поддерживается: поддерживается только транспорт XHTTP с Reality"
+
+#: common/widgets/messages.cpp:60
+msgctxt "@info"
+msgid "The configuration has more than one [Peer]; only one is supported"
+msgstr "В конфигурации больше одной секции [Peer]; поддерживается только одна"
+
+#: common/widgets/messages.cpp:61
+#, kde-format
+msgctxt "@info"
+msgid "The configuration has a malformed line %1"
+msgstr "В конфигурации ошибочная строка %1"
+
+#: common/widgets/messages.cpp:62
+#, kde-format
+msgctxt "@info"
+msgid "%1 is given twice"
+msgstr "%1 указан дважды"
+
+#: common/widgets/messages.cpp:63
+#, kde-format
+msgctxt "@info"
+msgid "%1 is not supported here and was dropped"
+msgstr "%1 здесь не поддерживается и отброшен"
+
+#: common/widgets/messages.cpp:64
+#, kde-format
+msgctxt "@info"
+msgid "%1 is a wg-quick setting and was dropped"
+msgstr "%1 — настройка wg-quick, отброшена"
+
+#: common/widgets/messages.cpp:65
+#, kde-format
+msgctxt "@info"
+msgid "%1: entry %2 was dropped, only the first IPv4 address is used"
+msgstr "%1: элемент %2 отброшен, используется только первый IPv4-адрес"
+
+#: common/widgets/messages.cpp:66
+#, kde-format
+msgctxt "@info"
+msgid "%1: entry %2 is IPv6 and was dropped"
+msgstr "%1: элемент %2 — IPv6, отброшен"
+
+#: common/widgets/messages.cpp:67
+#, kde-format
+msgctxt "@info"
+msgid "%1: entry %2 is not an IP address and was dropped"
+msgstr "%1: элемент %2 не является IP-адресом, отброшен"
+
+#: common/widgets/messages.cpp:68
+#, kde-format
+msgctxt "@info"
+msgid "%1 was carried into the additional parameters"
+msgstr "%1 перенесён в дополнительные параметры"
+
+#: common/widgets/messages.cpp:70
+#, kde-format
+msgctxt "@info"
+msgid "%1 is not carried by this format and is left out"
+msgstr "%1 не передаётся этим форматом и не вошёл"
+
+#: common/widgets/messages.cpp:71
+#, kde-format
+msgctxt "@info"
+msgid "%1 is asked for every time, so it is not in the export"
+msgstr "%1 запрашивается каждый раз, поэтому не вошёл в экспорт"
+
+#: common/widgets/serverblock.cpp:16
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Ports:"
+msgstr "Порты:"
+
+#: common/widgets/serverblock.cpp:17
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "443 or 443,5000-6000"
+msgstr "443 или 443,5000-6000"
+
+#: common/widgets/tlsblock.cpp:24
+#, kde-format
+msgctxt "@item:inlistbox the core's own choice"
+msgid "Default"
+msgstr "По умолчанию"
+
+#: common/widgets/*.ui:2
+#, kde-format
+msgctxt "@label:textbox"
+msgid "MTU:"
+msgstr "MTU:"
+
+#: common/widgets/*.ui:4
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Default"
+msgstr "По умолчанию"
+
+#: common/widgets/*.ui:6
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Additional parameters (JSON):"
+msgstr "Дополнительные параметры (JSON):"
+
+#: common/widgets/*.ui:8
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Settings of the core's outbound, for example {\"tcp_fast_open\": true}"
+msgstr "Настройки исходящего подключения ядра, например {\"tcp_fast_open\": true}"
+
+#: common/widgets/*.ui:10
+#, kde-format
+msgctxt "@option:check"
+msgid "Block traffic outside the VPN (kill switch)"
+msgstr "Блокировать трафик в обход VPN (kill switch)"
+
+#: common/widgets/*.ui:12
+#, kde-format
+msgctxt "@info"
+msgid "The kill switch applies only when all traffic goes through the VPN"
+msgstr "Kill switch действует, только когда весь трафик идёт через VPN"
+
+#: common/widgets/*.ui:14
+#, kde-format
+msgctxt "@option:check"
+msgid "Allow the local network while blocked"
+msgstr "Разрешить локальную сеть во время блокировки"
+
+#: common/widgets/*.ui:16
+#, kde-format
+msgctxt "@label:textbox"
+msgid "DNS servers:"
+msgstr "DNS-серверы:"
+
+#: common/widgets/*.ui:18
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "1.1.1.1, 9.9.9.9 when all traffic goes through the VPN"
+msgstr "1.1.1.1, 9.9.9.9, когда весь трафик идёт через VPN"
+
+#: common/widgets/*.ui:20
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Server:"
+msgstr "Сервер:"
+
+#: common/widgets/*.ui:22
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "Host name or IP address"
+msgstr "Имя хоста или IP-адрес"
+
+#: common/widgets/*.ui:24
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Port:"
+msgstr "Порт:"
+
+#: common/widgets/*.ui:30
+#, kde-format
+msgctxt "@label:textbox"
+msgid "ALPN:"
+msgstr "ALPN:"
+
+#: common/widgets/*.ui:32
+#, kde-format
+msgctxt "@info:placeholder"
+msgid "For example h3, comma-separated"
+msgstr "Например h3, через запятую"
+
+#: common/widgets/*.ui:36
+#, kde-format
+msgctxt "@label:textbox"
+msgid "Certificate SHA-256:"
+msgstr "SHA-256 сертификата:"
+
+#: common/widgets/*.ui:38
+#, kde-format
+msgctxt "@option:check"
+msgid "Do not verify the server certificate (insecure)"
+msgstr "Не проверять сертификат сервера (небезопасно)"
