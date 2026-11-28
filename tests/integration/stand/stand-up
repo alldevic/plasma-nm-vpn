@@ -6,6 +6,7 @@ here=$(dirname "$(readlink -f "$0")")
 bin=${PNV_BIN:-/opt/pnv-proto/bin}
 sec=$here/secrets
 run=/run/pnv-stand
+sleep_hook=/usr/lib/systemd/system-sleep/pnv-stand
 saved=/var/lib/pnv-stand/mgmt
 what=${1:-all}
 
@@ -281,6 +282,17 @@ wifi() {
   printf '%s\n' interface=wlan-srv driver=nl80211 ssid=pnv-stand hw_mode=g channel=1 wpa=2 wpa_key_mgmt=WPA-PSK \
     rsn_pairwise=CCMP wpa_passphrase=pnv-stand-wifi > "$run/hostapd.conf"
   start hostapd hostapd "$run/hostapd.conf"
+  # The access point shares the client's kernel and does not come back from a suspend; a real one does not sleep
+  # with the laptop. So it starts afresh on resume, as a unit of its own: systemd-suspend.service's are killed.
+  cat > "$sleep_hook" <<'HOOK'
+#!/bin/sh
+[ "$1" = post ] || exit 0
+pkill -x hostapd
+for _ in $(seq 30); do pgrep -x hostapd >/dev/null || break; sleep 0.1; done
+systemd-run --quiet --collect -p StandardOutput=append:/run/pnv-stand/hostapd.log -p StandardError=inherit \
+  ip netns exec stand hostapd /run/pnv-stand/hostapd.conf
+HOOK
+  chmod 755 "$sleep_hook"
   nmcli connection delete stand-wifi >/dev/null 2>&1 || true
   nmcli connection add type wifi con-name stand-wifi ifname wlan0 ssid pnv-stand wifi-sec.key-mgmt wpa-psk \
     wifi-sec.psk pnv-stand-wifi ipv4.method manual ipv4.addresses 192.0.4.2/24 ipv4.gateway 192.0.4.1 \

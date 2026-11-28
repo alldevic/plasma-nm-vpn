@@ -16,6 +16,7 @@ ip link del stand-cli 2>/dev/null
 nmcli connection delete stand >/dev/null 2>&1
 nmcli connection delete stand-wifi >/dev/null 2>&1
 modprobe -r mac80211_hwsim 2>/dev/null
+rm -f /usr/lib/systemd/system-sleep/pnv-stand
 rm -f /etc/NetworkManager/conf.d/90-pnv-stand.conf
 nmcli general reload conf
 
