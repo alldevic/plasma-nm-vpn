@@ -67,14 +67,15 @@ jobs:
           path: cores-staging
           key: ${{ steps.cores.outputs.cache-primary-key }}
       # The packages as in the packages job (1.2), and the never-packaged test build of the daemons (2.1),
-      # which the harness puts over the packaged binaries only for the cases marked test_build.
+      # which the harness puts over the packaged binaries only for the cases marked test_build, and the test helpers
+      # built with the editors (the banner form, 6.2).
       - name: Packages and the test build
         run: |
           docker run --rm -v "$PWD:/src" -w /src debian:forky sh -ec '
             apt-get update -qq && apt-get install -y -qq --no-install-recommends dpkg-dev debhelper >/dev/null
             apt-get build-dep -y -qq --no-install-recommends ./ >/dev/null
             dpkg-buildpackage -b -us -uc >/dev/null && mkdir -p debs && mv ../*.deb debs/
-            cmake -S . -B /tmp/tb -DBUILD_EDITORS=OFF -DBUILD_TESTING=OFF -DPNV_TEST_HOOKS=ON \
+            cmake -S . -B /tmp/tb -DBUILD_TESTING=OFF -DPNV_TEST_HOOKS=ON \
               -DCMAKE_INSTALL_PREFIX=/usr >/dev/null
             cmake --build /tmp/tb >/dev/null && DESTDIR=/src/test-build cmake --install /tmp/tb >/dev/null
             chown -R '"$(id -u):$(id -g)"' debs test-build'

@@ -308,6 +308,7 @@ Our own nftables table `inet plasma_nm_vpn`; NM does not touch it. Each connecti
 - Keys: `version=1`; `state=blocked`; `reason=gave-up|daemon-gone|inherited`; `since=<unix time>`, the moment of the first block, kept when the reason changes.
 - Writers (daemons, `--daemon-gone`, `--clear`) take `/run/plasma-nm-vpn/guard-status.lock` (`flock`) and replace the file atomically. They touch only their own group, so a group of a newer version stays as it is.
 - An entry is written only if the profile's `ks-out-<uuid>` chain exists. The README has a section “No internet after a VPN failure”.
+- The banner (6.2, `PnvKillSwitchBanner` in the widget library) reads the file when the form opens and after each clear, and does not watch it. It lists the `blocked` groups of version 1 by profile name (NetworkManagerQt; the UUID if the profile is gone) with their reason and time, marks those NM reports as connecting or connected, and offers Clear for each and Clear All for several. A line it cannot read, a group that is not a UUID, another version or another state is skipped. The tool runs through `QProcess` without a shell, and a non-zero exit leaves the banner as it was with a short message.
 
 ### Network changes and sleep
 
