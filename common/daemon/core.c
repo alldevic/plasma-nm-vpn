@@ -327,15 +327,28 @@ void pnv_session_succeeded(PnvSession *s)
         pnv_warning(s, "cannot cache the server IP: %s", error->message);
 }
 
-static guint liveness_timeout(void)
+/* The test build's timers: /run/pnv-test-<name> overrides one while the harness keeps it there, to hold an attempt
+ * open (6.2) or to wait seconds instead of minutes for a give-up. Read at each use. */
+static guint timer(const char *name G_GNUC_UNUSED, guint value)
 {
 #ifdef PNV_TEST_HOOKS
-    /* The harness may raise it (6.2 holds an attempt open this way). */
+    g_autofree char *path = g_strconcat("/run/pnv-test-", name, NULL);
     g_autofree char *text = NULL;
-    if (g_file_get_contents("/run/pnv-test-liveness-timeout", &text, NULL, NULL) && g_ascii_strtoull(text, NULL, 10))
-        return g_ascii_strtoull(text, NULL, 10);
+    guint64 n = 0;
+    if (g_file_get_contents(path, &text, NULL, NULL) && (n = g_ascii_strtoull(text, NULL, 10)) > 0 && n <= 3600)
+        return n;
 #endif
-    return PNV_LIVENESS_TIMEOUT;
+    return value;
+}
+
+static guint liveness_timeout(void)
+{
+    return timer("liveness-timeout", PNV_LIVENESS_TIMEOUT);
+}
+
+static guint liveness_interval(void)
+{
+    return timer("liveness-interval", PNV_LIVENESS_INTERVAL);
 }
 
 /* The profile's first DNS server, else 1.1.1.1: for a default-route tunnel the first default, with never-default
@@ -411,6 +424,11 @@ static void stop_liveness(PnvSession *s)
  * with this session's server IP and the current binding, Config and Ip4Config, then the liveness check; retried
  * with a growing backoff until CYCLE_TIMEOUT_S, then a give-up (with the success marker: fail closed). */
 #define CYCLE_TIMEOUT_S 120
+
+static guint cycle_timeout(void)
+{
+    return timer("cycle-timeout", CYCLE_TIMEOUT_S);
+}
 #define BACKOFF_MAX_S 16
 
 static GVariant *nm_property(const char *path, const char *interface, const char *name)
@@ -457,8 +475,8 @@ static gboolean cycle_expired(PnvSession *s)
 static void cycle_give_up(PnvSession *s, const char *reason)
 {
     s->cycle_active = FALSE;
-    pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "reconnecting failed within %d s (trigger: %s): %s",
-                CYCLE_TIMEOUT_S, s->cycle_trigger, reason);
+    pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "reconnecting failed within %u s (trigger: %s): %s",
+                cycle_timeout(), s->cycle_trigger, reason);
 }
 
 static gboolean cycle_retry(gpointer data)
@@ -509,7 +527,7 @@ static void cycle_checked(PnvSession *s, gboolean ok, const char *reason)
     remove_temp_block(s);
     pnv_message(s, "reconnected (trigger: %s, attempt %u, parent device %s)", s->cycle_trigger, s->cycle_attempt,
                 s->parent ? s->parent : "none");
-    s->live_timer = g_timeout_add_seconds(PNV_LIVENESS_INTERVAL, liveness_tick, s);
+    s->live_timer = g_timeout_add_seconds(liveness_interval(), liveness_tick, s);
 }
 
 static gboolean cycle_wait_device(gpointer data)
@@ -580,7 +598,7 @@ void pnv_session_reconnect(PnvSession *s, const char *trigger)
     s->cycle_count++;
     s->cycle_redo = FALSE;
     s->cycle_attempt = 1;
-    s->cycle_deadline = g_get_monotonic_time() + CYCLE_TIMEOUT_S * G_TIME_SPAN_SECOND;
+    s->cycle_deadline = g_get_monotonic_time() + cycle_timeout() * G_TIME_SPAN_SECOND;
     g_free(s->cycle_trigger);
     s->cycle_trigger = g_strdup(trigger);
     g_clear_handle_id(&s->live_timer, g_source_remove);
@@ -622,8 +640,8 @@ static gboolean reparent_poll(gpointer data)
     }
     if (g_get_monotonic_time() > s->reparent_deadline) {
         s->pending_timer = 0;
-        pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "no parent device came back within %d s",
-                    CYCLE_TIMEOUT_S);
+        pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "no parent device came back within %u s",
+                    cycle_timeout());
         return G_SOURCE_REMOVE;
     }
     return G_SOURCE_CONTINUE;
@@ -654,7 +672,7 @@ static gboolean reparent(gpointer data)
             pnv_warning(s, "cannot install the temporary block: %s", error->message);
     }
     s->reparenting = TRUE;
-    s->reparent_deadline = g_get_monotonic_time() + CYCLE_TIMEOUT_S * G_TIME_SPAN_SECOND;
+    s->reparent_deadline = g_get_monotonic_time() + cycle_timeout() * G_TIME_SPAN_SECOND;
     g_clear_handle_id(&s->live_timer, g_source_remove);
 #ifdef PNV_TEST_HOOKS
     if (!pnv_test_hook(s, "skip-starting"))
@@ -722,7 +740,7 @@ static void start_liveness(PnvSession *s)
     pnv_session_add_cleanup(s, "liveness check", stop_liveness);
     watch_network(s);
     liveness_run(s);
-    s->live_timer = g_timeout_add_seconds(PNV_LIVENESS_INTERVAL, liveness_tick, s);
+    s->live_timer = g_timeout_add_seconds(liveness_interval(), liveness_tick, s);
 }
 
 /* NM tells why the VPN goes down (0.7: before Disconnect reaches the daemon); only a user's disconnect and the

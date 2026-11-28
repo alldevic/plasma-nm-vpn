@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A newer push or run for the same branch or pull request supersedes a running one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Whether the change can affect what the jobs below check: documentation alone (docs/, *.md, LICENSE) cannot.
   # Jobs skipped by their condition count as passed for required checks. A manual run always runs.

@@ -1,4 +1,5 @@
 # Shared by the daemon cases: profiles, the journal, the units and resources of a profile.
+import contextlib
 import os
 import subprocess
 import time
@@ -156,3 +157,19 @@ def fetch(url, timeout=15):
         return r.returncode == 0
     wait_for(get, timeout=timeout)
     return out[0] if out else ""
+
+
+@contextlib.contextmanager
+def daemon_timers(**values):
+    """The test build's timers for the cases inside (core.c, timer()): liveness_timeout, liveness_interval and
+    cycle_timeout in seconds, so that a case waits seconds for a give-up instead of minutes."""
+    paths = {f"/run/pnv-test-{key.replace('_', '-')}": value for key, value in values.items()}
+    for path, value in paths.items():
+        with open(path, "w") as f:
+            f.write(f"{value}\n")
+    try:
+        yield
+    finally:
+        for path in paths:
+            if os.path.exists(path):
+                os.remove(path)

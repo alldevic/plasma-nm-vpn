@@ -5,7 +5,7 @@ import time
 import pytest
 
 from conftest import sh
-from helpers import cursor, fetch, ip4_dns, journal, ok, tun, units, wait_for
+from helpers import cursor, daemon_timers, fetch, ip4_dns, journal, ok, tun, units, wait_for
 from test_60_killswitch import (PROTOCOLS, connect, daemon_of, direct, entry, kill_switch, make, names,  # noqa: F401
                                 succeeded)
 
@@ -45,13 +45,15 @@ def test_inherited_block_survives(names, dead_server, protocol):
     names.append("pnv-b-inh")
     uuid = block(protocol, "pnv-b-inh")
     dead_server()
-    samples = subprocess.Popen(f"for i in $(seq 200); do nft list table inet plasma_nm_vpn | grep -c 'chain ks-out-{uuid}'; "
+    samples = subprocess.Popen(f"for i in $(seq 100); do nft list table inet plasma_nm_vpn | grep -c 'chain ks-out-{uuid}'; "
                                "sleep 0.1; done", shell=True, stdout=subprocess.PIPE, text=True)
     dns = subprocess.Popen(["timeout", "40", "tcpdump", "-n", "-l", "-Q", "out", "-i", "stand-cli", "port 53"],
                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     since = cursor()
-    connect("pnv-b-inh")
-    assert gave_up(since, uuid)
+    # The attempt's liveness check fails after 5 s instead of 15, well within the 10 s of samples.
+    with daemon_timers(liveness_timeout=5):
+        connect("pnv-b-inh")
+        assert gave_up(since, uuid)
     log = journal(since, "GLIB_DOMAIN=plasma-nm-vpn")
     assert "working under it (inherited block)" in log
     assert protocol != "hysteria2" or "under the inherited block: using the cached IP" in log
@@ -189,8 +191,9 @@ def test_liveness_detects_a_bad_first_connection(names, dead_server, protocol, w
     sh(f"rm -f /var/lib/plasma-nm-vpn/{uuid}")
     since = cursor()
     start = time.monotonic()
-    connect("pnv-b-live")
-    assert gave_up(since, uuid, timeout=40) and time.monotonic() - start < 40
+    with daemon_timers(liveness_timeout=5):
+        connect("pnv-b-live")
+        assert gave_up(since, uuid, timeout=40) and time.monotonic() - start < 40
     assert "the liveness check failed" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn")
     assert wait_for(lambda: not units(uuid), timeout=20)
     assert not kill_switch(uuid) and not entry(uuid) and not ok(f"test -e /var/lib/plasma-nm-vpn/{uuid}")
@@ -200,12 +203,15 @@ def test_liveness_detects_a_bad_first_connection(names, dead_server, protocol, w
 def test_dead_server_after_success_gives_up_after_the_cycle(names, dead_server):
     names.append("pnv-b-dead")
     uuid = make("hysteria2", "pnv-b-dead", server="198.51.100.1")
-    since = cursor()
-    assert connect("pnv-b-dead").returncode == 0 and succeeded(since, uuid)
-    dead_server()
-    assert wait_for(lambda: f"[{uuid}] reconnect step 1" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn"), timeout=260)
-    assert gave_up(since, uuid, timeout=200)
-    assert "reconnecting failed within 120 s" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn")
+    # Checks every 5 s, failing after 5 s each, and a 30 s cycle: the same sequence as 60, 15 and 120 s, in a minute.
+    with daemon_timers(liveness_interval=5, liveness_timeout=5, cycle_timeout=30):
+        since = cursor()
+        assert connect("pnv-b-dead").returncode == 0 and succeeded(since, uuid)
+        dead_server()
+        assert wait_for(lambda: f"[{uuid}] reconnect step 1" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn"),
+                        timeout=60)
+        assert gave_up(since, uuid, timeout=60)
+    assert "reconnecting failed within 30 s" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn")
     assert wait_for(lambda: not units(uuid), timeout=20) and kill_switch(uuid) and entry(uuid)
     time.sleep(15)
     assert not units(uuid), "NM reconnected on its own"

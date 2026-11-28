@@ -7,7 +7,7 @@ import time
 import pytest
 
 from conftest import sh
-from helpers import core_pid, cursor, fetch, ip4_dns, journal, ok, tun, units, wait_for
+from helpers import core_pid, cursor, daemon_timers, fetch, ip4_dns, journal, ok, tun, units, wait_for
 from test_60_killswitch import PROTOCOLS, connect, entry, kill_switch, make, names, succeeded  # noqa: F401
 
 pytestmark = [pytest.mark.kvm, pytest.mark.test_build]
@@ -193,8 +193,11 @@ def test_no_device_comes_back(names):
     since = cursor()
     assert connect("pnv-n-never").returncode == 0 and succeeded(since, uuid)
     since = cursor()
-    sh("nmcli device disconnect stand-cli wlan0")
-    assert wait_for(lambda: f"[{uuid}] giving up" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn"), timeout=180)
+    # A 20 s cycle instead of 120 s: the same give-up, sooner.
+    with daemon_timers(cycle_timeout=20):
+        sh("nmcli device disconnect stand-cli wlan0")
+        assert wait_for(lambda: f"[{uuid}] giving up" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn"), timeout=60)
+    assert "no parent device came back within 20 s" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn")
     assert wait_for(lambda: not units(uuid), timeout=20) and kill_switch(uuid) and entry(uuid)
 
 
