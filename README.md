@@ -52,8 +52,8 @@ update.
 ## Creating a profile
 
 System Settings → Wi-Fi & Networking (or the network applet → Configure) → **+** → pick **Hysteria2**,
-**VLESS XHTTP Reality** or **AmneziaWG** under “VPN connections” → fill in the **VPN** tab → **Save**. Connect from
-the network applet.
+**VLESS XHTTP Reality** or **AmneziaWG** under “VPN connections” → fill in the **VPN (hysteria2)**, **VPN (vless)**
+or **VPN (amneziawg)** tab → **Save**. Connect from the network applet.
 
 The form checks every field as you type and explains what is wrong under the field's group; **Save** stays disabled
 until the form is valid.
