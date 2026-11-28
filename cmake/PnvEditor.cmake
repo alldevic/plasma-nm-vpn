@@ -24,3 +24,10 @@ function(pnv_editor_metadata output)
     set(PNV_VERSION ${PROJECT_VERSION})
     configure_file(${PNV_EDITOR_TEMPLATE} ${output} @ONLY)
 endfunction()
+
+# pnv_editor_install(<module>): into plasma-nm's VPN plugin directory, finding the widget library of
+# plasma-nm-vpn-common by RUNPATH.
+function(pnv_editor_install target)
+    set_target_properties(${target} PROPERTIES INSTALL_RPATH ${KDE_INSTALL_FULL_LIBDIR}/plasma-nm-vpn)
+    install(TARGETS ${target} DESTINATION ${KDE_INSTALL_PLUGINDIR}/plasma/network/vpn)
+endfunction()

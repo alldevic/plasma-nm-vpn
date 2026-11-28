@@ -15,7 +15,7 @@ sudo ./stand-down
 | `stand-cli`, the client's "physical" link, NM profile `stand` | root namespace | 192.0.2.2/24, 2001:db8:1::2/64, LAN 192.168.77.2/24 |
 | gateway, "ISP" DNS :53 | netns `stand`, `stand-srv` | 192.0.2.1, 2001:db8:1::1 |
 | LAN neighbour, HTTP :80 | netns `stand`, `stand-srv` | 192.168.77.1 |
-| server: hysteria2 UDP 443, VLESS TCP 443, AmneziaWG UDP 51820 | netns `stand`, `lo` | 198.51.100.1, 2001:db8:100::1 |
+| server: hysteria2 UDP 443 (Salamander) and 4443 (no obfuscation, 198.51.100.1 only, 6.3), VLESS TCP 443, AmneziaWG UDP 51820 | netns `stand`, `lo` | 198.51.100.1, 2001:db8:100::1 |
 | "internet": HTTP :80, DNS :53 | netns `stand`, dummy `inet0` | 203.0.113.1, 2001:db8:113::1; DNS also 1.1.1.1 |
 | AmneziaWG tunnel | server / client `-4` / client `-6` | 100.64.0.1/24 / 100.64.0.2 / 100.64.0.3 |
 

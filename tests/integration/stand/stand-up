@@ -86,7 +86,10 @@ ContentPaddingAddition = 0-32"
     {\"type\": \"hysteria2\", \"listen\": \"$a\", \"listen_port\": 443,
      \"obfs\": {\"type\": \"salamander\", \"password\": \"$HY2_OBFS\"},
      \"users\": [{\"name\": \"pnv\", \"password\": \"$HY2_PASSWORD\"}],
-     \"tls\": {\"enabled\": true, \"alpn\": [\"h3\"], \"certificate_path\": \"$sec/hy2.crt\", \"key_path\": \"$sec/hy2.key\"}},"; done | sed '$ s/,$//')
+     \"tls\": {\"enabled\": true, \"alpn\": [\"h3\"], \"certificate_path\": \"$sec/hy2.crt\", \"key_path\": \"$sec/hy2.key\"}},"; done)
+    {"type": "hysteria2", "listen": "198.51.100.1", "listen_port": 4443,
+     "users": [{"name": "pnv", "password": "$HY2_PASSWORD"}],
+     "tls": {"enabled": true, "alpn": ["h3"], "certificate_path": "$sec/hy2.crt", "key_path": "$sec/hy2.key"}}
   ],
   "outbounds": [{"type": "direct"}]
 }
@@ -306,6 +309,7 @@ servers() {
   if [[ $what == hy2 || $what == all ]] && [ ! -f "$run/hy2.up" ]; then
     start hy2 "$bin/sing-box" run -c "$run/hy2.json"
     wait_port udp 443
+    wait_port udp 4443
     touch "$run/hy2.up"
   fi
   if [[ $what == vless || $what == all ]] && [ ! -f "$run/vless.up" ]; then

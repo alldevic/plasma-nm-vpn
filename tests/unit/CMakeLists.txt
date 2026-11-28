@@ -56,3 +56,11 @@ if(BUILD_EDITORS)
              -DSERVICE=org.freedesktop.NetworkManager.pnv.hysteria2 "-DNAME_RU=${meta_ru_name}"
              "-DDESCRIPTION_RU=${meta_ru_description}" -P ${CMAKE_CURRENT_SOURCE_DIR}/widgets/check-metadata.cmake)
 endif()
+
+if(BUILD_EDITORS)
+    add_executable(test-hysteria2-editor editors/test_hysteria2_editor.cpp)
+    target_compile_definitions(test-hysteria2-editor PRIVATE PNV_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_link_libraries(test-hysteria2-editor PRIVATE pnv-hysteria2-editor Qt6::Test)
+    add_test(NAME hysteria2-editor COMMAND test-hysteria2-editor)
+    set_tests_properties(hysteria2-editor PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)
+endif()

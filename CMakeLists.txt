@@ -52,7 +52,8 @@ if(BUILD_EDITORS)
     find_library(PLASMANM_EDITOR NAMES plasmanm_editor REQUIRED)
 
     add_library(pnv-editor-deps INTERFACE)
-    target_include_directories(pnv-editor-deps INTERFACE ${PROJECT_SOURCE_DIR}/third_party/plasma-nm)
+    target_include_directories(pnv-editor-deps INTERFACE ${PROJECT_SOURCE_DIR}/third_party/plasma-nm
+        ${PROJECT_SOURCE_DIR}/common/editor)
     target_link_libraries(pnv-editor-deps INTERFACE
         ${PLASMANM_EDITOR} Qt6::Widgets KF6::CoreAddons KF6::WidgetsAddons KF6::I18n KF6::NetworkManagerQt
         PkgConfig::LIBNM)

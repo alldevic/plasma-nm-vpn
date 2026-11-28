@@ -1,21 +1,9 @@
 // SPDX-License-Identifier: MIT
+// The Hysteria2 editor plugin (6.3). plasma-nm's stock import loads every VPN plugin, so the plugin itself does
+// nothing until asked for a widget, and it declines import and export.
 #include "vpnuiplugin.h"
 
-static const QString Service = QStringLiteral("org.freedesktop.NetworkManager.pnv.hysteria2");
-
-class Hysteria2Widget : public SettingWidget
-{
-    Q_OBJECT
-public:
-    using SettingWidget::SettingWidget;
-
-    QVariantMap setting() const override
-    {
-        NetworkManager::VpnSetting vpn;
-        vpn.setServiceType(Service);
-        return vpn.toMap();
-    }
-};
+#include "hysteria2widget.h"
 
 class Hysteria2UiPlugin : public VpnUiPlugin
 {
@@ -30,7 +18,7 @@ public:
 
     SettingWidget *askUser(const NetworkManager::VpnSetting::Ptr &setting, const QStringList &hints, QWidget *parent) override
     {
-        return new Hysteria2Widget(setting, hints, parent);
+        return new Hysteria2AuthWidget(setting, hints, parent);
     }
 
     QString suggestedFileName(const NetworkManager::ConnectionSettings::Ptr &) const override
