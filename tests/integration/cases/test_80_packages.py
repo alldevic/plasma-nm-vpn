@@ -16,8 +16,9 @@ DEBS = "/root/debs"
 @pytest.fixture
 def reinstall():
     yield
-    common, sb = glob.glob(f"{DEBS}/plasma-nm-vpn-common_*.deb"), glob.glob(f"{DEBS}/plasma-nm-vpn-sb_*.deb")
-    sh(f"apt-get install -y -q {common[0]} {sb[0]}", timeout=300)
+    # Removing common takes every core package with it: all of them come back, as prepare installed them.
+    debs = [glob.glob(f"{DEBS}/plasma-nm-vpn-{p}_*.deb")[0] for p in ("common", "sb", "amneziawg", "xray")]
+    sh(f"apt-get install -y -q {' '.join(debs)}", timeout=300)
     sh("nmcli connection delete pnv-p-remove", check=False)
 
 
