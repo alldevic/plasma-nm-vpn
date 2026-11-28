@@ -4,18 +4,13 @@
 #include <KLocalizedString>
 #include <QComboBox>
 #include <QFormLayout>
-#include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
-#include <QScrollArea>
-#include <QVBoxLayout>
 
 #include "advancedblock.h"
 #include "authblock.h"
-#include "killswitchbanner.h"
 #include "passwordfield.h"
 #include "pnv-profile.h"
-#include "pnv-secrets.h"
 #include "protectionblock.h"
 #include "serverblock.h"
 #include "tlsblock.h"
@@ -25,22 +20,6 @@ static const QString Password = QStringLiteral("password");
 static const QString ObfsPassword = QStringLiteral("obfs-password");
 static const QString Obfs = QStringLiteral("obfs");
 
-static PasswordField *secretField(const char *name, bool optional, QWidget *parent)
-{
-    auto *field = new PasswordField(parent);
-    field->setObjectName(QLatin1String(name));
-    field->setPasswordModeEnabled(true);
-    field->setPasswordOptionsEnabled(true);
-    field->setPasswordNotRequiredEnabled(optional);
-    return field;
-}
-
-static QLabel *label(const QString &text, QWidget *buddy)
-{
-    auto *l = new QLabel(text);
-    l->setBuddy(buddy);
-    return l;
-}
 
 Hysteria2ObfsBlock::Hysteria2ObfsBlock(PasswordField *obfsPassword, QWidget *parent)
     : PnvBlock(Service, parent)
@@ -61,12 +40,12 @@ Hysteria2ObfsBlock::Hysteria2ObfsBlock(PasswordField *obfsPassword, QWidget *par
     m_down->setPlaceholderText(i18nc("@info:placeholder", "Not set"));
 
     auto *form = new QFormLayout(this);
-    form->addRow(label(i18nc("@label:listbox", "Obfuscation:"), m_obfs), m_obfs);
-    form->addRow(m_obfsPasswordLabel = label(i18nc("@label:textbox", "Obfuscation password:"), m_obfsPassword),
+    form->addRow(pnvBuddyLabel(i18nc("@label:listbox", "Obfuscation:"), m_obfs), m_obfs);
+    form->addRow(m_obfsPasswordLabel = pnvBuddyLabel(i18nc("@label:textbox", "Obfuscation password:"), m_obfsPassword),
                  m_obfsPassword);
-    form->addRow(m_hopLabel = label(i18nc("@label:textbox", "Port hopping interval:"), m_hopInterval), m_hopInterval);
-    form->addRow(m_upLabel = label(i18nc("@label:textbox", "Upload, Mbit/s:"), m_up), m_up);
-    form->addRow(m_downLabel = label(i18nc("@label:textbox", "Download, Mbit/s:"), m_down), m_down);
+    form->addRow(m_hopLabel = pnvBuddyLabel(i18nc("@label:textbox", "Port hopping interval:"), m_hopInterval), m_hopInterval);
+    form->addRow(m_upLabel = pnvBuddyLabel(i18nc("@label:textbox", "Upload, Mbit/s:"), m_up), m_up);
+    form->addRow(m_downLabel = pnvBuddyLabel(i18nc("@label:textbox", "Download, Mbit/s:"), m_down), m_down);
     auto *problems = new QLabel(this);
     problems->setObjectName(QStringLiteral("problems"));
     form->addRow(problems);
@@ -124,7 +103,7 @@ void Hysteria2ObfsBlock::write(NMStringMap &data) const
 QList<PnvBlock::Field> Hysteria2ObfsBlock::fields() const
 {
     auto name = [](const QLabel *l) {
-        QString text = l->text();
+        QString text = l->text().remove(QLatin1Char('&'));
         return text.endsWith(QLatin1Char(':')) ? text.chopped(1) : text;
     };
     return {{Obfs, i18nc("@label", "Obfuscation")},
@@ -133,152 +112,31 @@ QList<PnvBlock::Field> Hysteria2ObfsBlock::fields() const
             {QStringLiteral("down-mbps"), name(m_downLabel)}};
 }
 
-static QGroupBox *group(const QString &title, QWidget *content)
-{
-    auto *box = new QGroupBox(title);
-    auto *layout = new QVBoxLayout(box);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(content);
-    return box;
-}
-
 Hysteria2Widget::Hysteria2Widget(const NetworkManager::VpnSetting::Ptr &setting, QWidget *parent,
                                  const QString &extraAllowlist)
-    : SettingWidget(setting, parent)
-    , m_password(secretField("password", false, nullptr))
-    , m_obfsPassword(secretField("obfsPassword", true, nullptr))
+    : PnvEditorWidget(Service, setting, parent)
 {
-    // plasma-nm's dialog does not grow with the form: the groups scroll instead of being squeezed.
-    auto *scroll = new QScrollArea(this);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setWidgetResizable(true);
-    auto *content = new QWidget(scroll);
-    scroll->setWidget(content);
-    auto *outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 0, 0, 0);
-    outer->addWidget(scroll);
-    auto *layout = new QVBoxLayout(content);
-    auto *server = new PnvServerBlock(Service, PnvServerBlock::PortList);
-    auto *auth = new PnvAuthBlock(Service, i18nc("@label:textbox", "Password:"), m_password);
+    PasswordField *password = secretField(Password, false);
+    PasswordField *obfsPassword = secretField(ObfsPassword, true);
+    m_obfs = new Hysteria2ObfsBlock(obfsPassword);
+    addGroup(i18nc("@title:group", "Server"), {new PnvServerBlock(Service, PnvServerBlock::PortList)});
+    addGroup(i18nc("@title:group", "Authentication"), {authBlock(i18nc("@label:textbox", "Password:"), Password, password)});
     // No fingerprint over QUIC, no pin field (design.md, "Profile data schema").
-    auto *tls = new PnvTlsBlock(Service);
-    m_obfs = new Hysteria2ObfsBlock(m_obfsPassword);
-    auto *protection = new PnvProtectionBlock(Service);
-    auto *advanced = new PnvAdvancedBlock(Service, extraAllowlist);
-    m_blocks = {server, auth, tls, m_obfs, protection, advanced};
-
-    layout->addWidget(new PnvKillSwitchBanner(content));
-    layout->addWidget(group(i18nc("@title:group", "Server"), server));
-    layout->addWidget(group(i18nc("@title:group", "Authentication"), auth));
-    layout->addWidget(group(i18nc("@title:group", "TLS"), tls));
-    layout->addWidget(group(i18nc("@title:group", "Obfuscation, port hopping"), m_obfs));
-    layout->addWidget(group(i18nc("@title:group", "Protection"), protection));
-    layout->addWidget(group(i18nc("@title:group", "Advanced"), advanced));
-    layout->addStretch();
-
-    for (PnvBlock *block : std::as_const(m_blocks))
-        connect(block, &PnvBlock::changed, this, [this] {
-            Q_EMIT validChanged(isValid());
-        });
-
-    if (setting)
-        loadConfig(setting);
-    watchChangedSetting();
+    addGroup(i18nc("@title:group", "TLS"), {new PnvTlsBlock(Service)});
+    addGroup(i18nc("@title:group", "Obfuscation, port hopping"), {m_obfs});
+    addGroup(i18nc("@title:group", "Protection"), {new PnvProtectionBlock(Service)});
+    addGroup(i18nc("@title:group", "Advanced"), {new PnvAdvancedBlock(Service, extraAllowlist)});
+    finish(setting);
 }
 
-void Hysteria2Widget::loadConfig(const NetworkManager::Setting::Ptr &setting)
+// Without obfuscation its password is not needed, whatever the field says.
+PasswordField::PasswordOption Hysteria2Widget::secretOption(const QString &key, const PasswordField *field) const
 {
-    const auto vpn = setting.staticCast<NetworkManager::VpnSetting>();
-    const NMStringMap data = vpn->data();
-    for (PnvBlock *block : std::as_const(m_blocks))
-        block->load(data);
-    pnvLoadSecretOption({Password, m_password}, data);
-    pnvLoadSecretOption({ObfsPassword, m_obfsPassword}, data);
-    loadSecrets(setting);
+    return key == ObfsPassword && !m_obfs->salamander() ? PasswordField::NotRequired : field->passwordOption();
 }
 
-void Hysteria2Widget::loadSecrets(const NetworkManager::Setting::Ptr &setting)
+QList<PnvPromptSecret> hysteria2PromptSecrets()
 {
-    const auto vpn = setting.staticCast<NetworkManager::VpnSetting>();
-    const NMStringMap secrets = vpn->secrets();
-    if (secrets.contains(Password))
-        m_password->setText(secrets.value(Password));
-    if (secrets.contains(ObfsPassword))
-        m_obfsPassword->setText(secrets.value(ObfsPassword));
-}
-
-QVariantMap Hysteria2Widget::setting() const
-{
-    NetworkManager::VpnSetting vpn;
-    vpn.setServiceType(Service);
-    NMStringMap data, secrets;
-    data.insert(QStringLiteral("schema"), QString::number(PNV_SCHEMA_VERSION));
-    for (PnvBlock *block : m_blocks)
-        block->write(data);
-    pnvWriteSecret({Password, m_password}, m_password->passwordOption(), data, secrets);
-    // Without obfuscation the obfuscation password is not needed, whatever the field says.
-    pnvWriteSecret({ObfsPassword, m_obfsPassword},
-                   m_obfs->salamander() ? m_obfsPassword->passwordOption() : PasswordField::NotRequired, data, secrets);
-    vpn.setData(data);
-    vpn.setSecrets(secrets);
-    // plasma-nm replaces the whole vpn setting with this one, so persistent is written on every save.
-    vpn.setPersistent(true);
-    return vpn.toMap();
-}
-
-bool Hysteria2Widget::isValid() const
-{
-    for (PnvBlock *block : m_blocks)
-        if (!block->isValid())
-            return false;
-    return true;
-}
-
-Hysteria2AuthWidget::Hysteria2AuthWidget(const NetworkManager::VpnSetting::Ptr &setting, const QStringList &hints,
-                                         QWidget *parent)
-    : SettingWidget(setting, hints, parent)
-{
-    const NMStringMap data = setting->data();
-    const NMStringMap stored = setting->secrets();
-    auto needed = [&](const QString &key) {
-        if (hints.contains(key))
-            return true;
-        bool ok = false;
-        const NetworkManager::Setting::SecretFlags flags(data.value(key + QLatin1String("-flags")).toInt(&ok));
-        return !flags.testFlag(NetworkManager::Setting::NotRequired) && stored.value(key).isEmpty();
-    };
-    auto *form = new QFormLayout(this);
-    const QList<QPair<QString, QString>> secrets{{Password, i18nc("@label:textbox", "Password:")},
-                                                 {ObfsPassword, i18nc("@label:textbox", "Obfuscation password:")}};
-    for (const auto &[key, text] : secrets) {
-        if (key == ObfsPassword && data.value(Obfs).isEmpty())
-            continue;
-        if (!needed(key))
-            continue;
-        auto *field = new PasswordField(this);
-        field->setObjectName(key);
-        field->setPasswordModeEnabled(true);
-        form->addRow(label(text, field), field);
-        connect(field, &PasswordField::textChanged, this, &Hysteria2AuthWidget::slotWidgetChanged);
-        m_fields.append({key, field});
-    }
-    watchChangedSetting();
-}
-
-QVariantMap Hysteria2AuthWidget::setting() const
-{
-    NMStringMap secrets;
-    for (const auto &[key, field] : m_fields)
-        secrets.insert(key, field->text());
-    NetworkManager::VpnSetting vpn;
-    vpn.setSecrets(secrets);
-    return vpn.toMap();
-}
-
-bool Hysteria2AuthWidget::isValid() const
-{
-    for (const auto &[key, field] : m_fields)
-        if (field->text().isEmpty())
-            return false;
-    return true;
+    return {{Password, i18nc("@label:textbox", "Password:"), {}},
+            {ObfsPassword, i18nc("@label:textbox", "Obfuscation password:"), Obfs}};
 }

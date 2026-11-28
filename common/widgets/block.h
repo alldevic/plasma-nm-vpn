@@ -36,8 +36,13 @@ protected:
         QString key;
         QString label;
     };
-    // The fields problems() checks, as write() produces them.
+    // The fields problems() checks, with the values checkedValues() gives them.
     virtual QList<Field> fields() const = 0;
+    // What is checked: what write() produces, unless a block checks a value it does not write (a secret).
+    virtual void checkedValues(NMStringMap &data) const
+    {
+        write(data);
+    }
 
     QString service() const;
     // Merges a list file of the core package under its prefix; a file that does not load is a problem of the block.

@@ -51,12 +51,15 @@ typedef enum {
     PNV_E_EXTRA_BAD_VALUE,    /* key, detail: the JSON path */
     PNV_E_LIST_FILE,          /* detail: the file; the loader could not read it */
     PNV_E_LIST_ENTRY,         /* detail: the file, position: the line */
+    PNV_E_BAD_PATH,           /* key: not an HTTP path (6.4) */
+    PNV_E_BAD_ENCRYPTION,     /* key: neither none nor a VLESS Encryption key (6.4) */
+    PNV_E_BAD_CHAIN,          /* key: a character an AmneziaWG tag chain cannot hold (6.4) */
 } PnvCode;
 
 /* The codes are grouped by origin, each group a range: the validators (2.2) here; the import parsers (6.6) and
  * the export (6.8) append theirs after it. */
 #define PNV_CODES_VALIDATOR_FIRST PNV_E_UNKNOWN_SERVICE
-#define PNV_CODES_VALIDATOR_LAST PNV_E_LIST_ENTRY
+#define PNV_CODES_VALIDATOR_LAST PNV_E_BAD_CHAIN
 
 /* Never carries a value from the profile: only key names, JSON paths, positions and limits. */
 typedef struct {

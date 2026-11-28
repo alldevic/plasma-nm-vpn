@@ -2,13 +2,8 @@
 // The Hysteria2 editor (6.3): the 6.1 blocks, its own obfuscation and port hopping group, the 6.2 banner.
 #pragma once
 
-#include "block.h"
-#include "settingwidget.h"
+#include "pnv-editor.h"
 
-#include <NetworkManagerQt/VpnSetting>
-
-class PasswordField;
-class PnvKillSwitchBanner;
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -34,7 +29,7 @@ private:
     QLabel *m_obfsPasswordLabel, *m_hopLabel, *m_upLabel, *m_downLabel;
 };
 
-class Hysteria2Widget : public SettingWidget
+class Hysteria2Widget : public PnvEditorWidget
 {
     Q_OBJECT
 public:
@@ -42,27 +37,11 @@ public:
     explicit Hysteria2Widget(const NetworkManager::VpnSetting::Ptr &setting, QWidget *parent = nullptr,
                              const QString &extraAllowlist = QStringLiteral("/usr/share/plasma-nm-vpn/sb/hysteria2-extra.list"));
 
-    void loadConfig(const NetworkManager::Setting::Ptr &setting) override;
-    void loadSecrets(const NetworkManager::Setting::Ptr &setting) override;
-    QVariantMap setting() const override;
-    bool isValid() const override;
+protected:
+    PasswordField::PasswordOption secretOption(const QString &key, const PasswordField *field) const override;
 
 private:
-    QList<PnvBlock *> m_blocks;
-    PasswordField *m_password, *m_obfsPassword;
     Hysteria2ObfsBlock *m_obfs;
 };
 
-// The prompt kded6 shows for a secret asked every time or rejected.
-class Hysteria2AuthWidget : public SettingWidget
-{
-    Q_OBJECT
-public:
-    Hysteria2AuthWidget(const NetworkManager::VpnSetting::Ptr &setting, const QStringList &hints, QWidget *parent = nullptr);
-
-    QVariantMap setting() const override;
-    bool isValid() const override;
-
-private:
-    QList<QPair<QString, PasswordField *>> m_fields;
-};
+QList<PnvPromptSecret> hysteria2PromptSecrets();

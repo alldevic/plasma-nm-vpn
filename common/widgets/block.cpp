@@ -59,7 +59,7 @@ QStringList PnvBlock::problems() const
 {
     QStringList out = d->listProblems;
     NMStringMap data;
-    write(data);
+    checkedValues(data);
     const QByteArray service = d->service.toUtf8();
     for (const Field &f : fields()) {
         g_auto(PnvProblem) problem = {};

@@ -39,6 +39,9 @@ static const struct {
     [PNV_E_EXTRA_BAD_VALUE] = {"extra-bad-value", "%K: %D has a value of a kind that is not allowed"},
     [PNV_E_LIST_FILE] = {"list-file", "cannot read the list %D"},
     [PNV_E_LIST_ENTRY] = {"list-entry", "the list %D has a bad entry on line %P"},
+    [PNV_E_BAD_PATH] = {"bad-path", "%K is not a path that starts with / and has no spaces"},
+    [PNV_E_BAD_ENCRYPTION] = {"bad-encryption", "%K is neither none nor a VLESS Encryption key"},
+    [PNV_E_BAD_CHAIN] = {"bad-chain", "%K has a character a tag chain cannot hold"},
 };
 
 const char *pnv_code_name(PnvCode code)

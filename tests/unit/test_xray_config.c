@@ -102,12 +102,12 @@ static void test_rejected(void)
         {"tls-fingerprint", "unsafe", PNV_E_BAD_ENUM},
         {"tls-fingerprint", "hellogolang", PNV_E_BAD_ENUM},
         {"xhttp-mode", "stream", PNV_E_BAD_ENUM},
-        {"xhttp-path", "no-slash", PNV_E_BAD_ENUM},
-        {"xhttp-path", "/a b", PNV_E_BAD_ENUM},
+        {"xhttp-path", "no-slash", PNV_E_BAD_PATH},
+        {"xhttp-path", "/a b", PNV_E_BAD_PATH},
         {"tls-sni", "www.stand.test\nx", PNV_E_CONTROL_CHAR},
         {"reality-pbk", "OkmsNCxt-wKj42ChHHmk1l-F1XTIG5qE7KoKeOtO0U", PNV_E_BAD_LENGTH},
         {"reality-sid", "abc", PNV_E_BAD_HEX},
-        {"encryption", "aes-128-gcm", PNV_E_BAD_ENUM},
+        {"encryption", "aes-128-gcm", PNV_E_BAD_ENCRYPTION},
     };
 
     for (gsize i = 0; i < G_N_ELEMENTS(cases); i++) {

@@ -52,11 +52,12 @@ Package: plasma-nm-vpn-xray
 Architecture: amd64
 Depends: plasma-nm-vpn-common (= ${pnv:Version}),
          plasma-nm (>= 4:6.0), plasma-nm (<< 4:7),
+         libqt6core6t64 (>= ${qt:BuildVersion}),
          ${shlibs:Depends}, ${misc:Depends}
 Description: VLESS XHTTP Reality VPN for NetworkManager and KDE Plasma
- NetworkManager VPN plugin for VLESS XHTTP Reality, using the Xray core
- (MPL-2.0; shipped unchanged from its upstream release). Supported protocols:
- VLESS XHTTP Reality.
+ NetworkManager VPN plugin and Plasma editor for VLESS XHTTP Reality,
+ using the Xray core (MPL-2.0; shipped unchanged from its upstream release).
+ Supported protocols: VLESS XHTTP Reality.
 
 Package: plasma-nm-vpn-amneziawg
 Architecture: amd64

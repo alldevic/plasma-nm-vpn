@@ -1,76 +1,23 @@
-# The Hysteria2 editor (6.3) without a desktop: profiles made by its form through the test driver
-# (tests/integration/tools/editor-form.cpp), which loads the installed plugin as plasma-nm does and saves through
-# ConnectionSettings as plasma-nm's connection editor does; then connected with nmcli. The applet, kded6's prompt
-# and the user's keychain are checked by hand on the desktop (milestone record).
-import configparser
-import glob
-import json
-import os
-import subprocess
-
+# The Hysteria2 editor (6.3) without a desktop, through the test driver (editors.py).
 import pytest
 
-from conftest import TEST_BUILD_DIR, sh
-from helpers import cursor, fetch, wait_for
+from conftest import sh
+from editors import form, form_available, persistent, show, up, works  # noqa: F401
+from helpers import cursor, wait_for
 from test_32_network import bench_secrets
 from test_60_killswitch import daemon_of, kill_switch, names, succeeded, units  # noqa: F401
 
-pytestmark = pytest.mark.test_build
+pytestmark = [pytest.mark.test_build, pytest.mark.usefixtures("form_available")]
 
 SERVICE = "org.freedesktop.NetworkManager.pnv.hysteria2"
-
-
-def driver():
-    found = [os.environ.get("PNV_EDITOR_FORM", ""),
-             *glob.glob(f"{TEST_BUILD_DIR or '/nonexistent'}/usr/lib/*/plasma-nm-vpn/test/pnv-editor-form"),
-             *glob.glob("/usr/lib/*/plasma-nm-vpn/test/pnv-editor-form")]
-    return next((f for f in found if f and os.path.exists(f)), None)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def form_available():
-    if not driver():
-        pytest.skip("no editor test driver (test build with the editors)")
-
-
-def form(*args):
-    r = subprocess.run([driver(), SERVICE, *args], capture_output=True, text=True,
-                       env={**os.environ, "QT_QPA_PLATFORM": "offscreen"})
-    lines = [line for line in r.stdout.splitlines() if line.startswith("{")]
-    assert lines, r.stderr
-    return json.loads(lines[-1])
 
 
 def new(name, **fields):
     s = bench_secrets()
     values = {"server": "srv.stand.test", "port": "443", "alpn": "h3", "insecure": "yes", "obfs": "salamander",
-              "password": s["HY2_PASSWORD"], "obfsPassword": s["HY2_OBFS"], "password:option": "all",
-              "obfsPassword:option": "all", "dns": "203.0.113.1", **fields}
-    return form("new", name, *(f"{k}={v}" for k, v in values.items() if v is not None))
-
-
-def show(name, field):
-    """vpn.data or vpn.secrets as NM saved them: the [vpn] and [vpn-secrets] groups of the profile's keyfile."""
-    keyfile = configparser.RawConfigParser(interpolation=None)
-    keyfile.optionxform = str
-    uuid = sh(f"nmcli -g connection.uuid connection show {name}").strip()
-    keyfile.read(sh(f"grep -l '^uuid={uuid}$' /etc/NetworkManager/system-connections/*").split()[0])
-    group = {"vpn.data": "vpn", "vpn.secrets": "vpn-secrets"}[field]
-    items = dict(keyfile[group]) if keyfile.has_section(group) else {}
-    return {k: v for k, v in items.items() if k not in ("service-type", "persistent")}
-
-
-def persistent(name):
-    return sh(f"nmcli -g vpn.persistent connection show {name}").strip()
-
-
-def up(name, *extra):
-    return subprocess.run(["nmcli", "--wait", "40", "connection", "up", name, *extra], capture_output=True, text=True)
-
-
-def works(name):
-    assert "pnv stand: internet" in fetch("http://203.0.113.1/")
-    sh(f"nmcli connection down {name}")
+              "password": s["HY2_PASSWORD"], "obfs-password": s["HY2_OBFS"], "password:option": "all",
+              "obfs-password:option": "all", "dns": "203.0.113.1", **fields}
+    return form(SERVICE, "new", name, *(f"{k}={v}" for k, v in values.items() if v is not None))
 
 
 @pytest.mark.parametrize("ports", ["443", "443,20000-20100"])
@@ -92,7 +39,7 @@ def test_resave_keeps_persistent_and_secrets(names):
     names.append("pnv-e-save")
     uuid = new("pnv-e-save")["uuid"]
     sh("nmcli connection modify pnv-e-save vpn.persistent no")
-    out = form("edit", uuid, "mtu=1400")
+    out = form(SERVICE, "edit", uuid, "mtu=1400")
     assert out["valid"] and "error" not in out, out
     assert persistent("pnv-e-save") == "yes"
     assert show("pnv-e-save", "vpn.data")["mtu"] == "1400" and "password" in show("pnv-e-save", "vpn.secrets")
@@ -115,7 +62,7 @@ def test_asked_every_time(names, tmp_path):
 def test_without_salamander_needs_no_obfuscation_password(names):
     """The bench's Hysteria2 inbound on 4443 has no obfuscation."""
     names.append("pnv-e-plain")
-    new("pnv-e-plain", port="4443", obfs="", obfsPassword="", **{"obfsPassword:option": "none"})
+    new("pnv-e-plain", port="4443", obfs="", **{"obfs-password": "", "obfs-password:option": "none"})
     data = show("pnv-e-plain", "vpn.data")
     assert "obfs" not in data and data["obfs-password-flags"] == "4"
     assert "obfs-password" not in show("pnv-e-plain", "vpn.secrets")
@@ -139,5 +86,5 @@ def test_banner_in_the_form(names):
     assert up("pnv-e-block").returncode == 0 and succeeded(since, uuid)
     sh(f"kill -9 {daemon_of(uuid)}")
     assert wait_for(lambda: not units(uuid), timeout=20) and kill_switch(uuid)
-    out = form("edit", uuid)
+    out = form(SERVICE, "edit", uuid)
     assert "Kill switch block active" in out.get("banner", "") and "pnv-e-block" in out["banner"], out

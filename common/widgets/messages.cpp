@@ -48,6 +48,9 @@ constexpr Message messages[] = {
     {PNV_E_EXTRA_BAD_VALUE, kli18nc("@info", "%1: %2 has a value of a kind that is not allowed"), "kd"},
     {PNV_E_LIST_FILE, kli18nc("@info", "Cannot read %1 of the core package"), "d"},
     {PNV_E_LIST_ENTRY, kli18nc("@info", "%1 of the core package has a bad entry on line %2"), "dl"},
+    {PNV_E_BAD_PATH, kli18nc("@info", "%1: must start with / and have no spaces"), "k"},
+    {PNV_E_BAD_ENCRYPTION, kli18nc("@info", "%1: must be none or a VLESS Encryption key"), "k"},
+    {PNV_E_BAD_CHAIN, kli18nc("@info", "%1: a tag chain cannot hold the characters # = [ ] or control characters"), "k"},
 };
 
 const Message *find(PnvCode code)

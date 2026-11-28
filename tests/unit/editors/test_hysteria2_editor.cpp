@@ -100,7 +100,7 @@ private Q_SLOTS:
     void secretsAreMasked()
     {
         Hysteria2Widget widget(profile(full, map({{"password", "x"}})), nullptr, extraList);
-        for (const char *name : {"password", "obfsPassword"}) {
+        for (const char *name : {"password", "obfs-password"}) {
             auto *field = widget.findChild<PasswordField *>(QLatin1String(name));
             QVERIFY(field);
             QCOMPARE(field->findChild<QLineEdit *>()->echoMode(), QLineEdit::Password);
@@ -136,7 +136,7 @@ private Q_SLOTS:
         NMStringMap data = full;
         data.insert(QStringLiteral("password-flags"), QStringLiteral("2"));
         data.insert(QStringLiteral("obfs-password-flags"), QStringLiteral("1"));
-        Hysteria2AuthWidget widget(profile(data, map({{"obfs-password", "stored"}})), {}, nullptr);
+        PnvAuthWidget widget(profile(data, map({{"obfs-password", "stored"}})), {}, hysteria2PromptSecrets(), nullptr);
         const auto fields = widget.findChildren<PasswordField *>();
         QCOMPARE(fields.size(), 1);
         QCOMPARE(fields[0]->objectName(), QStringLiteral("password"));
@@ -147,7 +147,7 @@ private Q_SLOTS:
         vpn.fromMap(widget.setting());
         QCOMPARE(vpn.secrets(), map({{"password", "typed"}}));
         // NM's hints name the secret it wants, e.g. after a wrong one.
-        Hysteria2AuthWidget hinted(profile(data, map({{"obfs-password", "stored"}})), {QStringLiteral("obfs-password")}, nullptr);
+        PnvAuthWidget hinted(profile(data, map({{"obfs-password", "stored"}})), {QStringLiteral("obfs-password")}, hysteria2PromptSecrets(), nullptr);
         QCOMPARE(hinted.findChildren<PasswordField *>().size(), 2);
     }
 };

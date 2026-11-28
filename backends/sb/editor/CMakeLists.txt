@@ -7,7 +7,7 @@ add_library(pnv-hysteria2-editor STATIC hysteria2widget.cpp)
 set_target_properties(pnv-hysteria2-editor PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(pnv-hysteria2-editor PRIVATE TRANSLATION_DOMAIN="plasma-nm-vpn")
 target_include_directories(pnv-hysteria2-editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(pnv-hysteria2-editor PUBLIC pnv-editor-deps pnv-widgets)
+target_link_libraries(pnv-hysteria2-editor PUBLIC pnv-editor-common)
 
 add_library(plasmanetworkmanagement_pnv_hysteria2ui MODULE hysteria2ui.cpp)
 target_include_directories(plasmanetworkmanagement_pnv_hysteria2ui PRIVATE ${CMAKE_CURRENT_BINARY_DIR})

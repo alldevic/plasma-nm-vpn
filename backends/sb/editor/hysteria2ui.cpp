@@ -18,7 +18,7 @@ public:
 
     SettingWidget *askUser(const NetworkManager::VpnSetting::Ptr &setting, const QStringList &hints, QWidget *parent) override
     {
-        return new Hysteria2AuthWidget(setting, hints, parent);
+        return new PnvAuthWidget(setting, hints, hysteria2PromptSecrets(), parent);
     }
 
     QString suggestedFileName(const NetworkManager::ConnectionSettings::Ptr &) const override

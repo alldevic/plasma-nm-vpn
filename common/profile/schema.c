@@ -262,7 +262,7 @@ static gboolean check_param(const char *key, const char *type, const char *value
          * comment in the awg config, and no '=' or '[', which would read as another key or section. */
         for (const char *c = value; *c; c++)
             if ((guchar)*c < 0x20 || (guchar)*c > 0x7e || strchr("#=[]", *c))
-                return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+                return fail(p, PNV_E_BAD_CHAIN, key, NULL, 0, 0);
         return TRUE;
     }
     return fail(p, PNV_E_LIST_ENTRY, key, NULL, 0, 0);
@@ -372,10 +372,10 @@ static gboolean apply(const Field *f, const char *key, const char *value, const 
     case T_URL_PATH:
         /* An HTTP path: starts with '/', printable ASCII without spaces. */
         if (value[0] != '/')
-            return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+            return fail(p, PNV_E_BAD_PATH, key, NULL, 0, 0);
         for (const char *c = value; *c; c++)
             if ((guchar)*c <= 0x20 || (guchar)*c > 0x7e)
-                return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+                return fail(p, PNV_E_BAD_PATH, key, NULL, 0, 0);
         g_free(*(char **)at);
         *(char **)at = g_strdup(value);
         return TRUE;
@@ -384,7 +384,7 @@ static gboolean apply(const Field *f, const char *key, const char *value, const 
         if (!g_str_equal(value, "none") && !(g_str_has_prefix(value, "mlkem768x25519plus.") &&
                                              strspn(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
                                                            "0123456789._-") == strlen(value)))
-            return fail(p, PNV_E_BAD_ENUM, key, NULL, 0, 0);
+            return fail(p, PNV_E_BAD_ENCRYPTION, key, NULL, 0, 0);
         g_free(*(char **)at);
         *(char **)at = g_strdup(value);
         return TRUE;
