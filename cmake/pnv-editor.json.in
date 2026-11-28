@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Category": "VPNService",
+        "Description": "@PNV_DESCRIPTION@",
+        "Description[ru]": "@PNV_DESCRIPTION_RU@",
+        "EnabledByDefault": false,
+        "License": "MIT",
+        "Name": "@PNV_NAME@",
+        "Name[ru]": "@PNV_NAME_RU@",
+        "Version": "@PNV_VERSION@"
+    },
+    "X-NetworkManager-Services": "@PNV_SERVICE@"
+}

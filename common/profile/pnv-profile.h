@@ -53,6 +53,11 @@ typedef enum {
     PNV_E_LIST_ENTRY,         /* detail: the file, position: the line */
 } PnvCode;
 
+/* The codes are grouped by origin, each group a range: the validators (2.2) here; the import parsers (6.6) and
+ * the export (6.8) append theirs after it. */
+#define PNV_CODES_VALIDATOR_FIRST PNV_E_UNKNOWN_SERVICE
+#define PNV_CODES_VALIDATOR_LAST PNV_E_LIST_ENTRY
+
 /* Never carries a value from the profile: only key names, JSON paths, positions and limits. */
 typedef struct {
     PnvCode code;
@@ -70,7 +75,7 @@ char *pnv_problem_describe(const PnvProblem *problem);
 
 /* Lists as data (allowlists, value lists for the forms): one entry per line with optional fields, '#'
  * comments. */
-typedef struct {
+typedef struct PnvList {
     GPtrArray *entries; /* in file order */
     GHashTable *set;
 } PnvList;

@@ -43,6 +43,9 @@ if(BUILD_EDITORS)
     include(KDECompilerSettings NO_POLICY_SCOPE)
 
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    if(BUILD_TESTING)
+        find_package(Qt6 REQUIRED COMPONENTS Test)
+    endif()
     find_package(KF6 REQUIRED COMPONENTS CoreAddons WidgetsAddons I18n NetworkManagerQt)
     # plasma-nm ships no development files: the editors use the headers in third_party/plasma-nm
     # and link only against its editor library.
@@ -54,6 +57,9 @@ if(BUILD_EDITORS)
         ${PLASMANM_EDITOR} Qt6::Widgets KF6::CoreAddons KF6::WidgetsAddons KF6::I18n KF6::NetworkManagerQt
         PkgConfig::LIBNM)
 
+    include(GenerateExportHeader)
+    include(${PROJECT_SOURCE_DIR}/cmake/PnvEditor.cmake)
+    add_subdirectory(common/widgets)
     add_subdirectory(backends/sb/editor)
 endif()
 

@@ -36,3 +36,19 @@ add_test(NAME xray-config COMMAND test-xray-config ${PROJECT_SOURCE_DIR}/backend
 add_executable(test-liveness test_liveness.c)
 target_link_libraries(test-liveness PRIVATE pnv-daemon)
 add_test(NAME liveness COMMAND test-liveness)
+
+if(BUILD_EDITORS)
+    add_executable(test-blocks widgets/test_blocks.cpp)
+    target_link_libraries(test-blocks PRIVATE pnv-widgets Qt6::Test)
+    add_test(NAME blocks COMMAND test-blocks)
+    set_tests_properties(blocks PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen)
+
+    set(meta_ru_name "Тестовое \"имя\"")
+    set(meta_ru_description "Тестовое описание \\ с обратной чертой")
+    pnv_editor_metadata(${CMAKE_CURRENT_BINARY_DIR}/test-editor.json
+        SERVICE org.freedesktop.NetworkManager.pnv.hysteria2
+        NAME "Test" DESCRIPTION "Test editor" NAME_RU "${meta_ru_name}" DESCRIPTION_RU "${meta_ru_description}")
+    add_test(NAME editor-metadata COMMAND ${CMAKE_COMMAND} -DFILE=${CMAKE_CURRENT_BINARY_DIR}/test-editor.json
+             -DSERVICE=org.freedesktop.NetworkManager.pnv.hysteria2 "-DNAME_RU=${meta_ru_name}"
+             "-DDESCRIPTION_RU=${meta_ru_description}" -P ${CMAKE_CURRENT_SOURCE_DIR}/widgets/check-metadata.cmake)
+endif()

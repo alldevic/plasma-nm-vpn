@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ProtectionBlock</class>
+ <widget class="QWidget" name="ProtectionBlock">
+  <layout class="QFormLayout" name="form">
+   <item row="0" column="1">
+    <widget class="QCheckBox" name="killSwitch">
+     <property name="text">
+      <string comment="@option:check">Block traffic outside the VPN (kill switch)</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QLabel" name="killSwitchHint">
+     <property name="text">
+      <string comment="@info">The kill switch applies only when all traffic goes through the VPN</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QLabel" name="killSwitchReason">
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QCheckBox" name="allowLan">
+     <property name="text">
+      <string comment="@option:check">Allow the local network while blocked</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0">
+    <widget class="QLabel" name="dnsLabel">
+     <property name="text">
+      <string comment="@label:textbox">DNS servers:</string>
+     </property>
+     <property name="buddy">
+      <cstring>dns</cstring>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="1">
+    <widget class="QLineEdit" name="dns">
+     <property name="placeholderText">
+      <string comment="@info:placeholder">1.1.1.1, 9.9.9.9 when all traffic goes through the VPN</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="0" colspan="2">
+    <widget class="QLabel" name="problems"/>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

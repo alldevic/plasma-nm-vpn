@@ -5,3 +5,4 @@ usr/share/plasma-nm-vpn/guard.nft
 usr/lib/plasma-nm-vpn/plasma-nm-vpn-tun-fd
 usr/share/plasma-nm-vpn/killswitch.nft
 usr/share/polkit-1/actions/io.github.alldevic.plasma-nm-vpn.policy
+usr/lib/*/plasma-nm-vpn/libpnv-widgets.so

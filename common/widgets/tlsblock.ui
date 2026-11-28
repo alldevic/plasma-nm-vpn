@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TlsBlock</class>
+ <widget class="QWidget" name="TlsBlock">
+  <layout class="QFormLayout" name="form">
+   <item row="0" column="0">
+    <widget class="QLabel" name="sniLabel">
+     <property name="text">
+      <string comment="@label:textbox">Server name (SNI):</string>
+     </property>
+     <property name="buddy">
+      <cstring>sni</cstring>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QLineEdit" name="sni">
+     <property name="placeholderText">
+      <string comment="@info:placeholder">The server address</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="alpnLabel">
+     <property name="text">
+      <string comment="@label:textbox">ALPN:</string>
+     </property>
+     <property name="buddy">
+      <cstring>alpn</cstring>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QLineEdit" name="alpn">
+     <property name="placeholderText">
+      <string comment="@info:placeholder">For example h3, comma-separated</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="fingerprintLabel">
+     <property name="text">
+      <string comment="@label:listbox">Fingerprint:</string>
+     </property>
+     <property name="buddy">
+      <cstring>fingerprint</cstring>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="fingerprint"/>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="pinLabel">
+     <property name="text">
+      <string comment="@label:textbox">Certificate SHA-256:</string>
+     </property>
+     <property name="buddy">
+      <cstring>pin</cstring>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QLineEdit" name="pin"/>
+   </item>
+   <item row="4" column="1">
+    <widget class="QCheckBox" name="insecure">
+     <property name="text">
+      <string comment="@option:check">Do not verify the server certificate (insecure)</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="0" colspan="2">
+    <widget class="QLabel" name="problems"/>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
