@@ -7,6 +7,7 @@
 #include <linux/rtnetlink.h>
 #include <sys/file.h>
 #include <sys/socket.h>
+#include <net/if.h>
 #include <unistd.h>
 
 #include "pnv-daemon.h"
@@ -160,4 +161,56 @@ gboolean pnv_pool_reserve(const char *uuid, const char *run_dir, guint32 *networ
     }
     close(lock);
     return found;
+}
+
+/* The interface of the best IPv4 default route in the main table, not one of our tunnels: the parent the daemon
+ * picks itself when NM leaves the VPN without one (5.5). */
+char *pnv_default_route_device(void)
+{
+    struct {
+        struct nlmsghdr nh;
+        struct rtmsg rt;
+    } req = {
+        .nh = {.nlmsg_len = sizeof req, .nlmsg_type = RTM_GETROUTE, .nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP},
+        .rt = {.rtm_family = AF_INET},
+    };
+    char buf[32768], name[IF_NAMESIZE] = "";
+    int fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
+    guint32 best = G_MAXUINT32;
+    gboolean done = FALSE;
+
+    if (fd < 0 || send(fd, &req, sizeof req, 0) < 0)
+        goto out;
+    while (!done) {
+        ssize_t n = recv(fd, buf, sizeof buf, 0);
+        if (n <= 0)
+            break;
+        for (struct nlmsghdr *nh = (struct nlmsghdr *)buf; NLMSG_OK(nh, (size_t)n); nh = NLMSG_NEXT(nh, n)) {
+            struct rtmsg *rt = NLMSG_DATA(nh);
+            int len = RTM_PAYLOAD(nh), oif = 0;
+            guint32 metric = 0;
+            char ifname[IF_NAMESIZE];
+
+            if (nh->nlmsg_type == NLMSG_DONE || nh->nlmsg_type == NLMSG_ERROR) {
+                done = TRUE;
+                break;
+            }
+            if (rt->rtm_dst_len != 0 || rt->rtm_table != RT_TABLE_MAIN || rt->rtm_type != RTN_UNICAST)
+                continue;
+            for (struct rtattr *a = RTM_RTA(rt); RTA_OK(a, len); a = RTA_NEXT(a, len)) {
+                if (a->rta_type == RTA_OIF)
+                    oif = *(int *)RTA_DATA(a);
+                else if (a->rta_type == RTA_PRIORITY)
+                    metric = *(guint32 *)RTA_DATA(a);
+            }
+            if (oif && if_indextoname(oif, ifname) && !g_str_has_prefix(ifname, "pnv-") && metric < best) {
+                best = metric;
+                g_strlcpy(name, ifname, sizeof name);
+            }
+        }
+    }
+out:
+    if (fd >= 0)
+        close(fd);
+    return *name ? g_strdup(name) : NULL;
 }

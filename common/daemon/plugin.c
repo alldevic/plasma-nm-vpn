@@ -59,9 +59,15 @@ static void cleanup_step_free(gpointer data)
     g_free(c);
 }
 
+/* Once per name: the reconnect cycle (5.5) starts the core again and must not stack its steps. */
 void pnv_session_add_cleanup(PnvSession *s, const char *name, PnvCleanup step)
 {
-    CleanupStep *c = g_new0(CleanupStep, 1);
+    CleanupStep *c;
+
+    for (guint i = 0; i < s->cleanups->len; i++)
+        if (g_str_equal(((CleanupStep *)s->cleanups->pdata[i])->name, name))
+            return;
+    c = g_new0(CleanupStep, 1);
     c->name = g_strdup(name);
     c->step = step;
     g_ptr_array_add(s->cleanups, c);

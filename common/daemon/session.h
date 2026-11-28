@@ -33,11 +33,21 @@ struct PnvSession {
     guint deactivation_reason;     /* NMActiveConnectionStateReason seen on the VPN connection, 0: none */
     gboolean live_started, live_succeeded, live_stopped;
     guint live_failures, live_timer;
+    /* The reconnect cycle (5.5). */
+    gboolean cycle_active, cycle_redo;
+    guint cycle_attempt, cycle_timer, sleep_watch, cycle_count;
+    gint64 cycle_deadline;
+    char *cycle_trigger;
+    gboolean reparenting;  /* waiting for NM to assign a parent device (5.5) */
+    gboolean temp_block;   /* the temporary block chain is installed */
+    guint pending_timer;
 };
 
 /* Steps 1 and 2 of Connect (design.md, "Core supervision and cleanup"), then resolution and the TUN. */
 gboolean pnv_session_prepare(PnvSession *s, GError **error);
 void pnv_session_send_config(PnvSession *s);
 void pnv_session_succeeded(PnvSession *s);
+void pnv_session_reconnect(PnvSession *s, const char *trigger);
+void pnv_session_stop_core(PnvSession *s);
 
 #endif

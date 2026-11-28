@@ -62,7 +62,30 @@ static char *lan_rules(const char *chain)
                            chain, chain);
 }
 
+static gboolean block_install(const char *prefix, const char *uuid, gboolean allow_lan, GError **error);
+
 gboolean pnv_killswitch_install(const char *uuid, gboolean allow_lan, GError **error)
+{
+    return block_install("ks-", uuid, allow_lan, error);
+}
+
+/* The same rules under other names, for the moment the VPN steps aside (5.5); removed by the daemon, orphan
+ * cleanup and --daemon-gone whatever the markers say. */
+gboolean pnv_temp_block_install(const char *uuid, gboolean allow_lan, GError **error)
+{
+    return block_install("tb-", uuid, allow_lan, error);
+}
+
+void pnv_temp_block_remove(const char *uuid)
+{
+    g_autofree char *script = g_strdup_printf("add table inet plasma_nm_vpn\n"
+                                              "destroy chain inet plasma_nm_vpn tb-out-%s\n"
+                                              "destroy chain inet plasma_nm_vpn tb-fwd-%s\n",
+                                              uuid, uuid);
+    pnv_nft_run(script, NULL);
+}
+
+static gboolean block_install(const char *prefix, const char *uuid, gboolean allow_lan, GError **error)
 {
     g_autofree char *template = NULL;
     g_auto(GStrv) lines = NULL;
@@ -77,7 +100,12 @@ gboolean pnv_killswitch_install(const char *uuid, gboolean allow_lan, GError **e
     lines = g_strsplit(template, "\n", -1);
     for (GStrv l = lines; *l; l++) {
         g_auto(GStrv) parts = g_strsplit(*l, "@UUID@", -1);
-        g_autofree char *line = g_strjoinv(uuid, parts);
+        g_autofree char *joined = g_strjoinv(uuid, parts);
+        g_autofree char *out_name = g_strconcat(prefix, "out-", NULL), *fwd_name = g_strconcat(prefix, "fwd-", NULL);
+        g_auto(GStrv) outs = g_strsplit(joined, "ks-out-", -1);
+        g_autofree char *renamed = g_strjoinv(out_name, outs);
+        g_auto(GStrv) fwds = g_strsplit(renamed, "ks-fwd-", -1);
+        g_autofree char *line = g_strjoinv(fwd_name, fwds);
 
         if (g_str_has_prefix(line, "@LAN@")) {
             g_autofree char *rules = allow_lan ? lan_rules(line + strlen("@LAN@")) : NULL;

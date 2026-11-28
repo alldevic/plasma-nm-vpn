@@ -112,7 +112,7 @@ static gboolean default_route(PnvSession *s)
     return plan->default_route;
 }
 
-static void stop_core(PnvSession *s)
+void pnv_session_stop_core(PnvSession *s)
 {
     if (s->core_watch)
         g_dbus_connection_signal_unsubscribe(pnv_bus(), s->core_watch);
@@ -198,6 +198,7 @@ static gboolean cleanup_orphans(PnvSession *s, GError **error)
             pnv_message(s, "removed the leftover %s", sock);
     }
     pnv_guard_remove(s->uuid);
+    pnv_temp_block_remove(s->uuid);
     return TRUE;
 }
 
@@ -243,7 +244,6 @@ static gboolean resolve(PnvSession *s, GError **error)
 {
     g_autoptr(GResolver) resolver = NULL;
     g_autoptr(GError) local = NULL;
-    g_autofree char *path = g_build_filename(s->run_dir, "server-ip", NULL);
 
     if (g_hostname_is_ip_address(s->profile->server)) {
         s->server_ip = g_strdup(s->profile->server);
@@ -274,8 +274,12 @@ static gboolean resolve(PnvSession *s, GError **error)
         }
     }
     pnv_message(s, "server IP %s", s->server_ip);
-    /* The reconnect cycle (5.5) reuses this session's IP. */
-    return g_file_set_contents_full(path, s->server_ip, -1, G_FILE_SET_CONTENTS_CONSISTENT, 0600, error);
+    /* The reconnect cycle (5.5) reuses this session's IP; it never resolves the name again. */
+    if (!pnv_state_set_string(s->run_dir, "server-ip", s->server_ip)) {
+        g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED, "cannot write the session state in %s", s->run_dir);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 /* Our own VPN connection: the newest activation of this profile. */
@@ -362,20 +366,27 @@ static void liveness_done(PnvSession *s, gboolean ok, const char *reason)
     case PNV_LIVENESS_FAILED:
         pnv_warning(s, "liveness check %u of %d failed: %s", s->live_failures, PNV_LIVENESS_FAILURES, reason);
         return;
-    case PNV_LIVENESS_DEAD:
-        /* Until the reconnect cycle (5.5). */
-        pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "the tunnel is dead: %d liveness checks in a row failed, "
-                    "the last: %s", PNV_LIVENESS_FAILURES, reason);
+    case PNV_LIVENESS_DEAD: {
+        g_autofree char *trigger = g_strdup_printf("%d liveness checks in a row failed, the last: %s",
+                                                   PNV_LIVENESS_FAILURES, reason);
+        pnv_session_reconnect(s, trigger);
         return;
     }
+    }
+}
+
+static void probe(PnvSession *s, gboolean first, PnvProbeDone done)
+{
+    if (s->protocol->probe)
+        s->protocol->probe(s, first, liveness_timeout(), done);
+    else
+        pnv_dns_probe(s, liveness_target(s), liveness_timeout(), done);
 }
 
 static void liveness_run(PnvSession *s)
 {
-    if (s->protocol->probe)
-        s->protocol->probe(s, !s->live_succeeded, liveness_timeout(), liveness_done);
-    else
-        pnv_dns_probe(s, liveness_target(s), liveness_timeout(), liveness_done);
+    if (!s->cycle_active)
+        probe(s, !s->live_succeeded, liveness_done);
 }
 
 static gboolean liveness_tick(gpointer data)
@@ -387,7 +398,262 @@ static gboolean liveness_tick(gpointer data)
 static void stop_liveness(PnvSession *s)
 {
     s->live_stopped = TRUE;
+    s->cycle_active = FALSE;
     g_clear_handle_id(&s->live_timer, g_source_remove);
+    g_clear_handle_id(&s->cycle_timer, g_source_remove);
+    g_clear_handle_id(&s->pending_timer, g_source_remove);
+    if (s->sleep_watch)
+        g_dbus_connection_signal_unsubscribe(pnv_bus(), s->sleep_watch);
+    s->sleep_watch = 0;
+}
+
+/* The reconnect cycle (design.md, "Network changes and sleep"): STARTING, a parent device, the core recreated
+ * with this session's server IP and the current binding, Config and Ip4Config, then the liveness check; retried
+ * with a growing backoff until CYCLE_TIMEOUT_S, then a give-up (with the success marker: fail closed). */
+#define CYCLE_TIMEOUT_S 120
+#define BACKOFF_MAX_S 16
+
+static char *current_parent(PnvSession *s)
+{
+    const GPtrArray *devices = s->ac ? nm_active_connection_get_devices(s->ac) : NULL;
+    return devices && devices->len ? g_strdup(nm_device_get_ip_iface(devices->pdata[0])) : NULL;
+}
+
+static void cycle_step1(PnvSession *s);
+static void cycle_step2(PnvSession *s);
+static void remove_temp_block(PnvSession *s);
+
+static gboolean cycle_expired(PnvSession *s)
+{
+    return g_get_monotonic_time() > s->cycle_deadline;
+}
+
+static void cycle_give_up(PnvSession *s, const char *reason)
+{
+    s->cycle_active = FALSE;
+    pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "reconnecting failed within %d s (trigger: %s): %s",
+                CYCLE_TIMEOUT_S, s->cycle_trigger, reason);
+}
+
+static gboolean cycle_retry(gpointer data)
+{
+    PnvSession *s = data;
+    NMVpnServiceState state = NM_VPN_SERVICE_STATE_UNKNOWN;
+
+    s->cycle_timer = 0;
+    g_object_get(s->plugin, NM_VPN_SERVICE_PLUGIN_STATE, &state, NULL);
+    /* Only a new STARTING makes NM reread DNS; while still STARTING, setting it again is a no-op. */
+    if (state == NM_VPN_SERVICE_STATE_STARTED)
+        cycle_step1(s);
+    else
+        cycle_step2(s);
+    return G_SOURCE_REMOVE;
+}
+
+static void cycle_failed(PnvSession *s, const char *reason)
+{
+    guint delay = MIN(1u << MIN(s->cycle_attempt, 4), BACKOFF_MAX_S);
+
+    if (cycle_expired(s)) {
+        cycle_give_up(s, reason);
+        return;
+    }
+    pnv_warning(s, "reconnect attempt %u failed (trigger: %s): %s; next in %u s", s->cycle_attempt, s->cycle_trigger,
+                reason, delay);
+    s->cycle_attempt++;
+    s->cycle_timer = g_timeout_add_seconds(delay, cycle_retry, s);
+}
+
+static void cycle_checked(PnvSession *s, gboolean ok, const char *reason)
+{
+    if (!s->cycle_active)
+        return;
+    if (!ok) {
+        cycle_failed(s, reason);
+        return;
+    }
+    if (s->cycle_redo) {
+        /* Another device change came in meanwhile: once more with the latest device, no extra STARTING. */
+        s->cycle_redo = FALSE;
+        cycle_step2(s);
+        return;
+    }
+    s->cycle_active = FALSE;
+    s->live_failures = 0;
+    remove_temp_block(s);
+    pnv_message(s, "reconnected (trigger: %s, attempt %u, parent device %s)", s->cycle_trigger, s->cycle_attempt,
+                s->parent ? s->parent : "none");
+    s->live_timer = g_timeout_add_seconds(PNV_LIVENESS_INTERVAL, liveness_tick, s);
+}
+
+static gboolean cycle_wait_device(gpointer data)
+{
+    PnvSession *s = data;
+    s->cycle_timer = 0;
+    cycle_step2(s);
+    return G_SOURCE_REMOVE;
+}
+
+static void cycle_step2(PnvSession *s)
+{
+    g_autofree char *parent = current_parent(s);
+    g_autoptr(GError) error = NULL;
+
+    if (!parent) {
+        if (cycle_expired(s)) {
+            cycle_give_up(s, "no parent device came back");
+            return;
+        }
+        /* After resume NM often brings the devices back only later. */
+        s->cycle_timer = g_timeout_add_seconds(1, cycle_wait_device, s);
+        return;
+    }
+    g_free(s->parent);
+    s->parent = g_steal_pointer(&parent);
+    pnv_message(s, "reconnect step 2: recreating %s on %s (trigger: %s, attempt %u)", s->core, s->parent,
+                s->cycle_trigger, s->cycle_attempt);
+    s->core_ready = FALSE;
+    pnv_session_stop_core(s);
+    if (!s->protocol->connect(s, &error)) {
+        cycle_failed(s, error->message);
+        return;
+    }
+    pnv_session_send_config(s);
+    probe(s, TRUE, cycle_checked);
+}
+
+static void cycle_step1(PnvSession *s)
+{
+#ifdef PNV_TEST_HOOKS
+    if (g_strcmp0(s->test_hook, "skip-starting") == 0) {
+        pnv_message(s, "test hook: reconnect without STARTING");
+        cycle_step2(s);
+        return;
+    }
+#endif
+    /* libnm has no public set_state. NM moves the connection to ACTIVATING and keeps the routes. */
+    g_object_set(s->plugin, NM_VPN_SERVICE_PLUGIN_STATE, NM_VPN_SERVICE_STATE_STARTING, NULL);
+    pnv_message(s, "reconnect step 1: STARTING (trigger: %s, attempt %u)", s->cycle_trigger, s->cycle_attempt);
+    cycle_step2(s);
+}
+
+/* Triggers: a parent device change, resume, a core unit failure after success, a dead tunnel. Events during a
+ * cycle are coalesced into it. */
+void pnv_session_reconnect(PnvSession *s, const char *trigger)
+{
+    if (s->live_stopped || !s->live_succeeded)
+        return;
+    if (s->cycle_active) {
+        pnv_message(s, "reconnect already running: %s joins it", trigger);
+        g_free(s->cycle_trigger);
+        s->cycle_trigger = g_strdup(trigger);
+        s->cycle_redo = TRUE;
+        return;
+    }
+    s->cycle_active = TRUE;
+    s->cycle_count++;
+    s->cycle_redo = FALSE;
+    s->cycle_attempt = 1;
+    s->cycle_deadline = g_get_monotonic_time() + CYCLE_TIMEOUT_S * G_TIME_SPAN_SECOND;
+    g_free(s->cycle_trigger);
+    s->cycle_trigger = g_strdup(trigger);
+    g_clear_handle_id(&s->live_timer, g_source_remove);
+    cycle_step1(s);
+}
+
+/* NM 1.58.1 leaves a persistent VPN without a parent device once the old one goes, and assigns a new one only when
+ * the policy recomputes the best default and the VPN is not it (nm-policy.c, update_ip4_routing). So the daemon
+ * makes the VPN step aside for a moment: STARTING, then Config and an Ip4Config with never-default; on ACTIVATED
+ * NM recomputes, assigns the device with the best default route and moves the route to the gateway onto it, and
+ * the devices change starts the regular cycle. During that moment the default route is not ours, so a temporary
+ * block chain (the kill switch rules) keeps traffic from leaving directly, whatever the profile's kill switch. */
+static void remove_temp_block(PnvSession *s)
+{
+    if (s->temp_block)
+        pnv_temp_block_remove(s->uuid);
+    s->temp_block = FALSE;
+}
+
+static gboolean reparent_expired(gpointer data)
+{
+    PnvSession *s = data;
+
+    s->pending_timer = 0;
+    if (s->reparenting)
+        pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "no parent device came back within %d s",
+                    CYCLE_TIMEOUT_S);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean reparent(gpointer data)
+{
+    PnvSession *s = data;
+    g_autoptr(GError) error = NULL;
+
+    s->pending_timer = 0;
+    if (s->live_stopped || current_parent(s))
+        return G_SOURCE_REMOVE;
+    pnv_message(s, "NM left the VPN without a parent device: stepping aside so that it assigns one");
+    if (default_route(s)) {
+        pnv_session_add_cleanup(s, "temporary block", remove_temp_block);
+        if (pnv_temp_block_install(s->uuid, s->profile->allow_lan, &error))
+            s->temp_block = TRUE;
+        else
+            pnv_warning(s, "cannot install the temporary block: %s", error->message);
+    }
+    s->reparenting = TRUE;
+    g_clear_handle_id(&s->live_timer, g_source_remove);
+    g_object_set(s->plugin, NM_VPN_SERVICE_PLUGIN_STATE, NM_VPN_SERVICE_STATE_STARTING, NULL);
+    pnv_session_send_config(s);
+    s->pending_timer = g_timeout_add_seconds(CYCLE_TIMEOUT_S, reparent_expired, s);
+    return G_SOURCE_REMOVE;
+}
+
+static void devices_changed(GObject *ac G_GNUC_UNUSED, GParamSpec *pspec G_GNUC_UNUSED, gpointer data)
+{
+    PnvSession *s = data;
+    const GPtrArray *devices = s->ac ? nm_active_connection_get_devices(s->ac) : NULL;
+    g_autofree char *parent = devices && devices->len ? g_strdup(nm_device_get_ip_iface(devices->pdata[0])) : NULL;
+    g_autofree char *trigger = NULL;
+
+    if (g_strcmp0(parent, s->parent) == 0)
+        return;
+    trigger = g_strdup_printf("parent device %s -> %s", s->parent ? s->parent : "none", parent ? parent : "none");
+    if (!parent) {
+        /* Let NM finish taking the old device down first. */
+        g_clear_handle_id(&s->pending_timer, g_source_remove);
+        s->pending_timer = g_timeout_add_seconds(2, reparent, s);
+        return;
+    }
+    if (s->reparenting) {
+        s->reparenting = FALSE;
+        g_clear_handle_id(&s->pending_timer, g_source_remove);
+    }
+    pnv_session_reconnect(s, trigger);
+}
+
+/* logind only: anyone else could send PrepareForSleep on the bus. */
+static void sleep_changed(GDBusConnection *bus G_GNUC_UNUSED, const char *sender G_GNUC_UNUSED,
+                          const char *path G_GNUC_UNUSED, const char *interface G_GNUC_UNUSED,
+                          const char *signal G_GNUC_UNUSED, GVariant *params, gpointer data)
+{
+    gboolean sleeping;
+
+    if (!g_variant_is_of_type(params, G_VARIANT_TYPE("(b)")))
+        return;
+    g_variant_get(params, "(b)", &sleeping);
+    if (!sleeping)
+        pnv_session_reconnect(data, "resume");
+}
+
+static void watch_network(PnvSession *s)
+{
+    if (s->ac)
+        g_signal_connect(s->ac, "notify::" NM_ACTIVE_CONNECTION_DEVICES, G_CALLBACK(devices_changed), s);
+    s->sleep_watch = g_dbus_connection_signal_subscribe(pnv_bus(), "org.freedesktop.login1",
+                                                        "org.freedesktop.login1.Manager", "PrepareForSleep",
+                                                        "/org/freedesktop/login1", NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+                                                        sleep_changed, s, NULL);
 }
 
 /* Right after ACTIVATED; only its success counts as the session's success. Then every 60 s. */
@@ -395,6 +661,7 @@ static void start_liveness(PnvSession *s)
 {
     s->live_started = TRUE;
     pnv_session_add_cleanup(s, "liveness check", stop_liveness);
+    watch_network(s);
     liveness_run(s);
     s->live_timer = g_timeout_add_seconds(PNV_LIVENESS_INTERVAL, liveness_tick, s);
 }
@@ -506,10 +773,16 @@ static void core_changed(GDBusConnection *bus G_GNUC_UNUSED, const char *sender 
 
     if (!s->core_ready || !g_variant_lookup(changed, "ActiveState", "&s", &state))
         return;
-    if (g_str_equal(state, "failed") || g_str_equal(state, "inactive") || g_str_equal(state, "deactivating"))
-        /* Until 5.5 brings the reconnect cycle. */
-        pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "%s stopped (%s); see journalctl -u %s", s->core,
-                    state, s->core);
+    if (!g_str_equal(state, "failed") && !g_str_equal(state, "inactive") && !g_str_equal(state, "deactivating"))
+        return;
+    if (s->live_succeeded) {
+        g_autofree char *trigger = g_strdup_printf("%s stopped (%s)", s->core, state);
+        s->core_ready = FALSE;
+        pnv_session_reconnect(s, trigger);
+        return;
+    }
+    pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "%s stopped (%s); see journalctl -u %s", s->core, state,
+                s->core);
 }
 
 static void watch_core(PnvSession *s)
@@ -571,7 +844,7 @@ gboolean pnv_session_start_core(PnvSession *s, const PnvCore *core, const char *
     pnv_prop(&p, "BindsTo", strv(s->scope, NULL));
     pnv_prop(&p, "After", strv(s->scope, s->guard));
     pnv_prop(&p, "CollectMode", g_variant_new_string("inactive-or-failed"));
-    pnv_session_add_cleanup(s, "core unit", stop_core);
+    pnv_session_add_cleanup(s, "core unit", pnv_session_stop_core);
     if (!pnv_unit_start(s->core, &p, error))
         return FALSE;
     watch_core(s);
@@ -626,10 +899,24 @@ void pnv_session_send_config(PnvSession *s)
     g_variant_builder_init(&servers, G_VARIANT_TYPE("au"));
     for (guint i = 0; i < plan->dns->len; i++)
         g_variant_builder_add_value(&servers, ip4(plan->dns->pdata[i]));
+#ifdef PNV_TEST_HOOKS
+    /* cycle-dns: a different DNS list from the cycle shows whether NM applied it (5.8). */
+    if (g_strcmp0(s->test_hook, "cycle-dns") == 0 && s->cycle_active)
+        g_variant_builder_add_value(&servers, ip4("203.0.113.53"));
+#endif
     g_variant_builder_init(&routes, G_VARIANT_TYPE("aau"));
     for (guint i = 0; i < plan->routes->len; i++) {
         PnvCidr4 c = g_array_index(plan->routes, PnvCidr4, i);
         guint32 route[] = {htonl(c.address), c.prefix, 0, 0};
+        g_variant_builder_add_value(&routes, g_variant_new_fixed_array(G_VARIANT_TYPE_UINT32, route, 4, sizeof *route));
+    }
+    /* NM 1.58.1 returns a VPN from STARTING to ACTIVATED only after a commit of a changed IP configuration
+     * (nm-vpn-connection.c, POST_COMMIT → PRE_UP), so an identical Ip4Config would leave it ACTIVATING. Every other
+     * cycle therefore adds a /32 to another address of the TUN's own subnet, which the subnet route covers anyway. */
+    if (s->cycle_count % 2) {
+        guint32 mask = s->tun_prefix ? ~0u << (32 - s->tun_prefix) : 0;
+        guint32 other = (s->tun_address & mask) + ((s->tun_address & ~mask) == 2 ? 1 : 2);
+        guint32 route[] = {htonl(other), 32, 0, 0};
         g_variant_builder_add_value(&routes, g_variant_new_fixed_array(G_VARIANT_TYPE_UINT32, route, 4, sizeof *route));
     }
     g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
@@ -637,7 +924,7 @@ void pnv_session_send_config(PnvSession *s)
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_PREFIX, g_variant_new_uint32(s->tun_prefix));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_DNS, g_variant_builder_end(&servers));
     g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_ROUTES, g_variant_builder_end(&routes));
-    if (plan->never_default)
+    if (plan->never_default || s->reparenting)
         g_variant_builder_add(&b, "{sv}", NM_VPN_PLUGIN_IP4_CONFIG_NEVER_DEFAULT, g_variant_new_boolean(TRUE));
     nm_vpn_service_plugin_set_ip4_config(s->plugin, g_variant_builder_end(&b));
     pnv_message(s, "Config and Ip4Config sent");

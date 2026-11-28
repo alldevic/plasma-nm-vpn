@@ -54,6 +54,8 @@ void pnv_guard_remove(const char *uuid);
 gboolean pnv_killswitch_install(const char *uuid, gboolean allow_lan, GError **error);
 void pnv_killswitch_remove(const char *uuid);
 gboolean pnv_killswitch_present(const char *uuid);
+gboolean pnv_temp_block_install(const char *uuid, gboolean allow_lan, GError **error);
+void pnv_temp_block_remove(const char *uuid);
 GStrv pnv_killswitch_list(void); /* the UUIDs that have kill switch chains */
 
 /* guard-status (status.c): reason is gave-up, daemon-gone or inherited. */
@@ -67,6 +69,7 @@ char *pnv_resolve_server(GResolver *resolver, const char *name, guint timeout_ms
 char *pnv_cache_read(const char *dir, const char *uuid, const char *server);
 gboolean pnv_cache_write(const char *dir, const char *uuid, const char *server, const char *ip, GError **error);
 gboolean pnv_pool_reserve(const char *uuid, const char *run_dir, guint32 *network, GError **error);
+char *pnv_default_route_device(void);
 
 /* The liveness check (liveness.c). */
 #define PNV_LIVENESS_INTERVAL 60 /* s between periodic checks */
@@ -124,6 +127,7 @@ void pnv_run_dir_remove(const char *path);
 char *pnv_uapi_socket(const char *tun); /* /run/amneziawg/<tun>.sock */
 gboolean pnv_state_get(const char *run_dir, const char *marker);
 gboolean pnv_state_set(const char *run_dir, const char *marker, gboolean value);
+gboolean pnv_state_set_string(const char *run_dir, const char *key, const char *value);
 gboolean pnv_daemon_gone(const char *uuid);
 char *pnv_tun_owner(const char *uuid);
 
@@ -155,7 +159,7 @@ NMConnection *pnv_session_connection(PnvSession *session);
 const char *pnv_session_uuid(PnvSession *session);
 const PnvProfile *pnv_session_profile(PnvSession *session);
 
-/* Registers a cleanup step; disconnect runs the steps synchronously, last registered first. */
+/* Registers a cleanup step, once per name; disconnect runs the steps synchronously, last registered first. */
 void pnv_session_add_cleanup(PnvSession *session, const char *name, PnvCleanup step);
 
 /* Gives up: logs the reason (never secrets) and reports the failure code to NM, which then stops the
