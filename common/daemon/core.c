@@ -413,10 +413,36 @@ static void stop_liveness(PnvSession *s)
 #define CYCLE_TIMEOUT_S 120
 #define BACKOFF_MAX_S 16
 
+static GVariant *nm_property(const char *path, const char *interface, const char *name)
+{
+    g_autoptr(GVariant) r = g_dbus_connection_call_sync(pnv_bus(), NM_DBUS_SERVICE, path,
+                                                        "org.freedesktop.DBus.Properties", "Get",
+                                                        g_variant_new("(ss)", interface, name), G_VARIANT_TYPE("(v)"),
+                                                        G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
+    GVariant *value = NULL;
+
+    if (r)
+        g_variant_get(r, "(v)", &value);
+    return value;
+}
+
+/* The VPN's parent device, asked from NM itself: libnm's cache was seen lagging behind an assignment that NM had
+ * already made (an empty device list for good), which would leave the cycle waiting for nothing. */
 static char *current_parent(PnvSession *s)
 {
-    const GPtrArray *devices = s->ac ? nm_active_connection_get_devices(s->ac) : NULL;
-    return devices && devices->len ? g_strdup(nm_device_get_ip_iface(devices->pdata[0])) : NULL;
+    g_autoptr(GVariant) devices = s->ac ? nm_property(nm_object_get_path(NM_OBJECT(s->ac)),
+                                                      NM_DBUS_INTERFACE_ACTIVE_CONNECTION, "Devices")
+                                        : NULL;
+    g_autoptr(GVariant) iface = NULL;
+    const char *device;
+
+    if (!devices || !g_variant_is_of_type(devices, G_VARIANT_TYPE("ao")) || g_variant_n_children(devices) == 0)
+        return NULL;
+    g_variant_get_child(devices, 0, "&o", &device);
+    iface = nm_property(device, NM_DBUS_INTERFACE_DEVICE, "IpInterface");
+    return iface && g_variant_is_of_type(iface, G_VARIANT_TYPE_STRING) && *g_variant_get_string(iface, NULL)
+               ? g_variant_dup_string(iface, NULL)
+               : NULL;
 }
 
 static void cycle_step1(PnvSession *s);
@@ -452,7 +478,7 @@ static gboolean cycle_retry(gpointer data)
 
 static void cycle_failed(PnvSession *s, const char *reason)
 {
-    guint delay = MIN(1u << MIN(s->cycle_attempt, 4), BACKOFF_MAX_S);
+    guint delay = MIN(1u << MIN(s->cycle_attempt - 1, 4), BACKOFF_MAX_S);
 
     if (cycle_expired(s)) {
         cycle_give_up(s, reason);
@@ -525,7 +551,7 @@ static void cycle_step2(PnvSession *s)
 static void cycle_step1(PnvSession *s)
 {
 #ifdef PNV_TEST_HOOKS
-    if (g_strcmp0(s->test_hook, "skip-starting") == 0) {
+    if (pnv_test_hook(s, "skip-starting")) {
         pnv_message(s, "test hook: reconnect without STARTING");
         cycle_step2(s);
         return;
@@ -574,15 +600,33 @@ static void remove_temp_block(PnvSession *s)
     s->temp_block = FALSE;
 }
 
-static gboolean reparent_expired(gpointer data)
+/* libnm's notify::devices for the assignment may come before its cache has the device, so while stepping
+ * aside the daemon also looks every second, until the cycle timeout. */
+static gboolean reparent_poll(gpointer data)
 {
     PnvSession *s = data;
+    g_autofree char *parent = NULL;
+    g_autofree char *trigger = NULL;
 
-    s->pending_timer = 0;
-    if (s->reparenting)
+    if (!s->reparenting) {
+        s->pending_timer = 0;
+        return G_SOURCE_REMOVE;
+    }
+    parent = current_parent(s);
+    if (parent) {
+        s->pending_timer = 0;
+        s->reparenting = FALSE;
+        trigger = g_strdup_printf("parent device %s assigned by NM", parent);
+        pnv_session_reconnect(s, trigger);
+        return G_SOURCE_REMOVE;
+    }
+    if (g_get_monotonic_time() > s->reparent_deadline) {
+        s->pending_timer = 0;
         pnv_give_up(s, NM_VPN_PLUGIN_FAILURE_CONNECT_FAILED, "no parent device came back within %d s",
                     CYCLE_TIMEOUT_S);
-    return G_SOURCE_REMOVE;
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
 }
 
 static gboolean reparent(gpointer data)
@@ -590,9 +634,17 @@ static gboolean reparent(gpointer data)
     PnvSession *s = data;
     g_autoptr(GError) error = NULL;
 
+    g_autofree char *parent = current_parent(s);
+
     s->pending_timer = 0;
-    if (s->live_stopped || current_parent(s))
+    if (s->live_stopped)
         return G_SOURCE_REMOVE;
+    if (parent) {
+        /* NM had a device again by the time the wait was over. */
+        g_autofree char *trigger = g_strdup_printf("parent device %s", parent);
+        pnv_session_reconnect(s, trigger);
+        return G_SOURCE_REMOVE;
+    }
     pnv_message(s, "NM left the VPN without a parent device: stepping aside so that it assigns one");
     if (default_route(s)) {
         pnv_session_add_cleanup(s, "temporary block", remove_temp_block);
@@ -602,24 +654,31 @@ static gboolean reparent(gpointer data)
             pnv_warning(s, "cannot install the temporary block: %s", error->message);
     }
     s->reparenting = TRUE;
+    s->reparent_deadline = g_get_monotonic_time() + CYCLE_TIMEOUT_S * G_TIME_SPAN_SECOND;
     g_clear_handle_id(&s->live_timer, g_source_remove);
-    g_object_set(s->plugin, NM_VPN_SERVICE_PLUGIN_STATE, NM_VPN_SERVICE_STATE_STARTING, NULL);
+#ifdef PNV_TEST_HOOKS
+    if (!pnv_test_hook(s, "skip-starting"))
+#endif
+        g_object_set(s->plugin, NM_VPN_SERVICE_PLUGIN_STATE, NM_VPN_SERVICE_STATE_STARTING, NULL);
     pnv_session_send_config(s);
-    s->pending_timer = g_timeout_add_seconds(CYCLE_TIMEOUT_S, reparent_expired, s);
+    s->pending_timer = g_timeout_add_seconds(1, reparent_poll, s);
     return G_SOURCE_REMOVE;
 }
 
 static void devices_changed(GObject *ac G_GNUC_UNUSED, GParamSpec *pspec G_GNUC_UNUSED, gpointer data)
 {
     PnvSession *s = data;
-    const GPtrArray *devices = s->ac ? nm_active_connection_get_devices(s->ac) : NULL;
-    g_autofree char *parent = devices && devices->len ? g_strdup(nm_device_get_ip_iface(devices->pdata[0])) : NULL;
+    g_autofree char *parent = current_parent(s);
     g_autofree char *trigger = NULL;
 
     if (g_strcmp0(parent, s->parent) == 0)
         return;
     trigger = g_strdup_printf("parent device %s -> %s", s->parent ? s->parent : "none", parent ? parent : "none");
     if (!parent) {
+        /* Already stepping aside: the poll waits for the device. A device without its interface name yet
+         * counts as none here, and the poll sees it once NM has it. */
+        if (s->reparenting)
+            return;
         /* Let NM finish taking the old device down first. */
         g_clear_handle_id(&s->pending_timer, g_source_remove);
         s->pending_timer = g_timeout_add_seconds(2, reparent, s);
@@ -812,7 +871,7 @@ gboolean pnv_session_start_core(PnvSession *s, const PnvCore *core, const char *
 
 #ifdef PNV_TEST_HOOKS
     /* broken-config: the core unit fails at once, for any core (amneziawg-go reads no config file). */
-    if (g_strcmp0(s->test_hook, "broken-config") == 0) {
+    if (pnv_test_hook(s, "broken-config")) {
         g_free(binary);
         binary = g_strdup("/bin/false");
     }
@@ -904,7 +963,7 @@ void pnv_session_send_config(PnvSession *s)
         g_variant_builder_add_value(&servers, ip4(plan->dns->pdata[i]));
 #ifdef PNV_TEST_HOOKS
     /* cycle-dns: a different DNS list from the cycle shows whether NM applied it (5.8). */
-    if (g_strcmp0(s->test_hook, "cycle-dns") == 0 && s->cycle_active)
+    if (pnv_test_hook(s, "cycle-dns") && s->cycle_active)
         g_variant_builder_add_value(&servers, ip4("203.0.113.53"));
 #endif
     g_variant_builder_init(&routes, G_VARIANT_TYPE("aau"));

@@ -116,13 +116,20 @@ static void test_slow_cleanup(PnvSession *s)
     pnv_message(s, "test hook: slow cleanup step done");
 }
 
+/* vpn.data pnv-test-hook: a comma-separated list of the test build's hooks. */
+gboolean pnv_test_hook(PnvSession *s, const char *name)
+{
+    g_auto(GStrv) hooks = s->test_hook ? g_strsplit(s->test_hook, ",", -1) : NULL;
+    return hooks && g_strv_contains((const char *const *)hooks, name);
+}
+
 /* The test build's hooks, chosen by vpn.data pnv-test-hook; TRUE if the hook replaces the launch. */
 static gboolean test_hooks(PnvSession *s)
 {
     s->test_hook = g_strdup(nm_setting_vpn_get_data_item(nm_connection_get_setting_vpn(s->connection),
                                                          "pnv-test-hook"));
     pnv_session_add_cleanup(s, "test hook: slow step", test_slow_cleanup);
-    if (g_strcmp0(s->test_hook, "give-up") == 0) {
+    if (pnv_test_hook(s, "give-up")) {
         g_idle_add(test_give_up, NULL);
         return TRUE;
     }
@@ -199,7 +206,7 @@ static gboolean launch(gpointer data)
         return G_SOURCE_REMOVE;
     }
 #ifdef PNV_TEST_HOOKS
-    if (g_strcmp0(s->test_hook, "hold-before-config") == 0) {
+    if (pnv_test_hook(s, "hold-before-config")) {
         pnv_message(s, "test hook: holding Ip4Config for 20 s");
         g_timeout_add_seconds(20, send_held_config, s);
         return G_SOURCE_REMOVE;

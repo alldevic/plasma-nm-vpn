@@ -39,6 +39,7 @@ struct PnvSession {
     gint64 cycle_deadline;
     char *cycle_trigger;
     gboolean reparenting;  /* waiting for NM to assign a parent device (5.5) */
+    gint64 reparent_deadline;
     gboolean temp_block;   /* the temporary block chain is installed */
     guint pending_timer;
 };
@@ -49,5 +50,8 @@ void pnv_session_send_config(PnvSession *s);
 void pnv_session_succeeded(PnvSession *s);
 void pnv_session_reconnect(PnvSession *s, const char *trigger);
 void pnv_session_stop_core(PnvSession *s);
+#ifdef PNV_TEST_HOOKS
+gboolean pnv_test_hook(PnvSession *s, const char *name);
+#endif
 
 #endif

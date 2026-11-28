@@ -190,13 +190,13 @@ net() {
 table inet stand {
   chain input {
     type filter hook input priority 0;
-    iifname "stand-srv" ip daddr { 203.0.113.0/24, 1.1.1.1 } drop
-    iifname "stand-srv" ip6 daddr 2001:db8:113::/48 drop
+    iifname { "stand-srv", "wlan-srv" } ip daddr { 203.0.113.0/24, 1.1.1.1 } drop
+    iifname { "stand-srv", "wlan-srv" } ip6 daddr 2001:db8:113::/48 drop
   }
   # Port hopping: a UDP range on the server address leads to the hysteria2 port; the counter shows its use.
   chain hop {
     type nat hook prerouting priority dstnat;
-    iifname "stand-srv" ip daddr 198.51.100.1 udp dport 20000-20100 counter dnat ip to 198.51.100.1:443
+    iifname { "stand-srv", "wlan-srv" } ip daddr 198.51.100.1 udp dport 20000-20100 counter dnat ip to 198.51.100.1:443
   }
 }
 EOF
@@ -263,6 +263,33 @@ EOF
   echo "stand-cli: IPv6 addresses still tentative" >&2; exit 1
 }
 
+# A second way to the bench (5.8): Wi-Fi emulated by mac80211_hwsim. One radio goes into netns stand as the access
+# point wlan-srv (hostapd, WPA2, 192.0.4.1), the other stays as the client wlan0 under NM (192.0.4.2, profile
+# stand-wifi, a worse metric than the veth). Only where the kernel has the module (the VM, not a container).
+wifi() {
+  [ -f "$run/wifi.up" ] && return
+  modprobe mac80211_hwsim radios=2 2>/dev/null || { echo "no mac80211_hwsim: no Wi-Fi on the bench" >&2; return; }
+  local phy ap
+  for _ in $(seq 50); do phy=$(ls /sys/class/ieee80211 2>/dev/null | sort | sed -n 2p); [ -n "$phy" ] && break; sleep 0.1; done
+  ap=$(ls "/sys/class/ieee80211/$phy/device/net/" | head -1)
+  nmcli device set "$ap" managed no
+  iw phy "$phy" set netns name stand
+  ns ip link set "$ap" name wlan-srv
+  ns ip addr add 192.0.4.1/24 dev wlan-srv
+  ns ip link set wlan-srv up
+  ns ip route replace 192.0.4.0/24 dev wlan-srv proto kernel scope link src 198.51.100.1
+  printf '%s\n' interface=wlan-srv driver=nl80211 ssid=pnv-stand hw_mode=g channel=1 wpa=2 wpa_key_mgmt=WPA-PSK \
+    rsn_pairwise=CCMP wpa_passphrase=pnv-stand-wifi > "$run/hostapd.conf"
+  start hostapd hostapd "$run/hostapd.conf"
+  nmcli connection delete stand-wifi >/dev/null 2>&1 || true
+  nmcli connection add type wifi con-name stand-wifi ifname wlan0 ssid pnv-stand wifi-sec.key-mgmt wpa-psk \
+    wifi-sec.psk pnv-stand-wifi ipv4.method manual ipv4.addresses 192.0.4.2/24 ipv4.gateway 192.0.4.1 \
+    ipv4.dns 192.0.2.1 ipv4.route-metric 600 ipv6.method disabled >/dev/null
+  for _ in $(seq 30); do nmcli --wait 10 connection up stand-wifi >/dev/null 2>&1 && break; sleep 1; done
+  nmcli -g GENERAL.STATE connection show stand-wifi | grep -q activated || { echo "stand-wifi did not come up" >&2; exit 1; }
+  touch "$run/wifi.up"
+}
+
 servers() {
   if [[ $what == hy2 || $what == all ]] && [ ! -f "$run/hy2.up" ]; then
     start hy2 "$bin/sing-box" run -c "$run/hy2.json"
@@ -292,3 +319,4 @@ if [ ! -e /run/netns/stand ]; then
   client
 fi
 servers
+wifi
