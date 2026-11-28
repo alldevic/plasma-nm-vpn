@@ -15,7 +15,11 @@ def test_tunnel_back_after_suspend():
     name = "pnv-s-resume"
     uuid = hy2(name, server="198.51.100.1")
     try:
+        since = cursor()
         assert connect(name).returncode == 0
+        # A resume before the first liveness check has passed is no trigger: the session has not succeeded yet.
+        assert wait_for(lambda: f"[{uuid}] session succeeded" in journal(since, "GLIB_DOMAIN=plasma-nm-vpn"),
+                        timeout=30)
         assert "pnv stand: internet" in fetch("http://203.0.113.1/")
         since = cursor()
         sh("rtcwake -m no -s 20")

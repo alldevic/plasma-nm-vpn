@@ -394,7 +394,7 @@ Phase 2: `Ip6Config`, a ULA address on the TUN.
 - A profile for each of the three protocols can be created in plasma-nm both manually and by import; it connects and disconnects from the applet.
 - There are no secrets in `vpn.data`; a profile from an unprivileged user does not allow executing code or reading and writing files as root.
 - No DNS and IPv6 leaks with a default-route tunnel; with the kill switch, traffic does not go directly when the tunnel goes down.
-- The connection recovers after switching Wi-Fi ↔ Ethernet and after sleep (the acceptable time is set based on the results of milestone 5.8; Wi-Fi: emulation in the VM, sleep: S3 suspend in the VM; both also on the hardware test machine, if available).
+- The connection recovers after switching Wi-Fi ↔ Ethernet, after sleep and after a core crash within 20 s: from the parent device going down, the kernel's resume or the crash to the daemon's “reconnected”, with the liveness check passed (Wi-Fi: emulation in the VM, sleep: S3 suspend in the VM; both also on the hardware test machine, if available). Measured in 5.8 on the bench: a parent change 2.6–3.6 s, a resume 0.3–2.0 s, a core crash 0.3–2.0 s (AmneziaWG the slowest, for its handshake); 20 s leaves room for shared CI runners and for a real access point.
 - After a disconnect or an abnormal termination, no interfaces, routes, rules, units or processes are left in the system, except for kill switch chains and their `guard-status` entry in the cases described above. The run directory `/run/plasma-nm-vpn/<uuid>/` is removed too, by the daemon on disconnect or by `--daemon-gone` after a crash.
 
 ## Research findings

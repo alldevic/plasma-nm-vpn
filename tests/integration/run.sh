@@ -48,7 +48,7 @@ tar -C "$root" --exclude=.git --exclude=./build --exclude=./cores-staging --excl
 # the vsock session, so the harness reconnects and waits for the exit code instead of holding a session.
 "$vm" ssh "systemd-run --quiet --unit=pnv-cases --working-directory=/root/src/tests/integration \
   -E PNV_DNS_MODE=$mode -E PNV_KVM=1 -E PNV_TEST_BUILD=1 -E PNV_TEST_BUILD_DIR=/root/test-build \
-  -E PNV_PACKAGES=1 sh -c 'python3 -m pytest -v -p no:cacheprovider \
+  -E PNV_PACKAGES=1 sh -c 'python3 -m pytest -v -p no:cacheprovider -o junit_logging=system-out \
   --junitxml=/root/report.xml cases > /root/cases.log 2>&1; echo \$? > /root/cases.rc'"
 for _ in $(seq 360); do
   sleep 5
