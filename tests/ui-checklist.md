@@ -52,5 +52,5 @@ Passed on 2026-11-28 with the build at commit `a8786d6` (6.8) in the local VM (D
 
 ## Observations for 7.2
 
-- In a 1280-pixel window, System Settings gives the editor less width than its fields want, so the editor page scrolls sideways and the banner's “Clear” sits at the right edge. A maximized window or the stand-alone `kcmshell6 kcm_networkmanagement` shows it whole.
-- The banner does not wrap its entries. For a block whose profile is gone, the entry and its button show the UUID, and the editor page scrolls sideways even in a maximized window (7.1, Russian locale).
+- In a 1280-pixel window, the editor page scrolls sideways. This is plasma-nm's own layout: every tab, the stock ones included, is centred between 600 and 800 pixels (`wrapWithPreferredWidth` in plasma-nm 6.7), and the System Settings panel is narrower. Resolved in 7.2 on our side: the editor asks plasma-nm for its content's width (up to 800 pixels), so the dialog shows the form without scrolling sideways.
+- The banner's buttons share one row, and a bare UUID (a block of a deleted profile) or a long name made it wider than the tab, even in a maximized window. Resolved in 7.2: the name on a button is shortened in the middle; the list above keeps it whole.
