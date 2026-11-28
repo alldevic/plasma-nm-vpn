@@ -63,11 +63,12 @@ Package: plasma-nm-vpn-amneziawg
 Architecture: amd64
 Depends: plasma-nm-vpn-common (= ${pnv:Version}),
          plasma-nm (>= 4:6.0), plasma-nm (<< 4:7),
+         libqt6core6t64 (>= ${qt:BuildVersion}),
          ${shlibs:Depends}, ${misc:Depends}
 Description: AmneziaWG VPN for NetworkManager and KDE Plasma
- NetworkManager VPN plugin for AmneziaWG 3.1, using the userspace
- amneziawg-go (MIT) and awg from amneziawg-tools (GPL-2.0). Supported
- protocols: AmneziaWG.
+ NetworkManager VPN plugin and Plasma editor for AmneziaWG 3.1, using the
+ userspace amneziawg-go (MIT) and awg from amneziawg-tools (GPL-2.0).
+ Supported protocols: AmneziaWG.
 
 Package: plasma-nm-vpn-archive-keyring
 Architecture: all

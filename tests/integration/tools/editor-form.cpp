@@ -5,13 +5,14 @@
 //   editor-form <service> new <name> [<object>=<value> | <field>:option=<option> ...]
 //   editor-form <service> edit <uuid> [...]
 // A value goes into the QLineEdit, QPlainTextEdit, PasswordField, QCheckBox (yes/no) or QComboBox (item data) of
-// that name. Options: user, all, ask, none. Prints one JSON line: valid, problems, uuid.
+// that name; click=<button> presses a button. Options: user, all, ask, none. Prints one JSON line: valid, problems, uuid.
 #include <NetworkManagerQt/Connection>
 #include <NetworkManagerQt/ConnectionSettings>
 #include <NetworkManagerQt/Settings>
 #include <NetworkManagerQt/VpnSetting>
 #include <KMessageWidget>
 #include <QApplication>
+#include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDBusMetaType>
@@ -35,6 +36,11 @@ static int fail(const QString &why)
 
 static bool set(QWidget *form, const QString &name, const QString &value)
 {
+    // click=<button>: e.g. a table's Add button, before its new row's fields are set.
+    if (name == QLatin1String("click")) {
+        auto *button = form->findChild<QAbstractButton *>(value);
+        return button && button->isEnabled() && (button->click(), true);
+    }
     if (auto *f = form->findChild<PasswordField *>(name))
         return f->setText(value), true;
     if (auto *e = form->findChild<QLineEdit *>(name))

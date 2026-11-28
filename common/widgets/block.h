@@ -43,6 +43,11 @@ protected:
     {
         write(data);
     }
+    // Further checks through the 2.2 library that are stricter than the profile schema (an editor's own rules).
+    virtual QStringList extraProblems() const
+    {
+        return {};
+    }
 
     QString service() const;
     // Merges a list file of the core package under its prefix; a file that does not load is a problem of the block.

@@ -67,7 +67,7 @@ QStringList PnvBlock::problems() const
         if (!pnv_check_field(service.constData(), key.constData(), value.constData(), d->list, &problem))
             out << pnvProblemMessage(problem, f.label);
     }
-    return out;
+    return out + extraProblems();
 }
 
 bool PnvBlock::isValid() const

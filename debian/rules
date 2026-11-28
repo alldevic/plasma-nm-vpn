@@ -52,5 +52,5 @@ override_dh_shlibdeps:
 override_dh_gencontrol:
 	dh_gencontrol -pplasma-nm-vpn-sb -- -v$(SB_VERSION) -Vpnv:Version=$(DEB_VERSION) -Vqt:BuildVersion=$(QT_VERSION)
 	dh_gencontrol -pplasma-nm-vpn-xray -- -v$(XRAY_VERSION) -Vpnv:Version=$(DEB_VERSION) -Vqt:BuildVersion=$(QT_VERSION)
-	dh_gencontrol -pplasma-nm-vpn-amneziawg -- -v$(AWG_VERSION) -Vpnv:Version=$(DEB_VERSION)
+	dh_gencontrol -pplasma-nm-vpn-amneziawg -- -v$(AWG_VERSION) -Vpnv:Version=$(DEB_VERSION) -Vqt:BuildVersion=$(QT_VERSION)
 	dh_gencontrol --remaining-packages -- -Vpnv:Version=$(DEB_VERSION)
