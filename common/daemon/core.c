@@ -78,6 +78,10 @@ static void decide_kill_switch(PnvSession *s)
     gboolean explicit = !s->give_up && (s->deactivation_reason == NM_ACTIVE_CONNECTION_STATE_REASON_USER_DISCONNECTED ||
                                         s->deactivation_reason == NM_ACTIVE_CONNECTION_STATE_REASON_CONNECTION_REMOVED);
 
+    if (s->inherited) {
+        pnv_message(s, "the inherited block stays (the session did not succeed)");
+        return;
+    }
     if (!s->kill_switch)
         return;
     if (succeeded && !explicit) {
@@ -154,19 +158,13 @@ static gboolean cleanup_orphans(PnvSession *s, GError **error)
 {
     const char *const units[] = {s->scope, s->guard, s->core};
     g_autofree char *owner = NULL;
-    gboolean takeover = FALSE;
     gint64 deadline = g_get_monotonic_time() + ORPHAN_WAIT_MS * G_TIME_SPAN_MILLISECOND;
 
-    if (!pnv_unit_down(s->scope)) {
-        g_mkdir_with_parents(s->run_dir, 0700);
-        takeover = pnv_state_set(s->run_dir, "takeover", TRUE);
-        pnv_message(s, "the previous instance is still active: takeover marker placed, waiting for it");
-    }
+    if (!pnv_unit_down(s->scope))
+        pnv_message(s, "the previous instance is still active: waiting for it");
     for (gsize i = 0; i < G_N_ELEMENTS(units); i++) {
         gint64 left = (deadline - g_get_monotonic_time()) / G_TIME_SPAN_MILLISECOND;
         if (!pnv_unit_wait_down(units[i], MAX(left, 0))) {
-            if (takeover)
-                pnv_state_set(s->run_dir, "takeover", FALSE);
             g_set_error(error, G_IO_ERROR, G_IO_ERROR_BUSY,
                         "the previous instance of this profile is still up after %d s (%s)", ORPHAN_WAIT_MS / 1000,
                         units[i]);
@@ -248,6 +246,17 @@ static gboolean resolve(PnvSession *s, GError **error)
     if (g_hostname_is_ip_address(s->profile->server)) {
         s->server_ip = g_strdup(s->profile->server);
         s->server_literal = TRUE;
+    } else if (s->inherited) {
+        /* Under the block DNS goes nowhere but a tunnel; a lookup would bypass it or fail. */
+        s->server_ip = pnv_cache_read(PNV_CACHE_DIR, s->uuid, s->profile->server);
+        if (!s->server_ip) {
+            g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                        "the kill switch of an earlier session is in place and there is no cached IP for %s; the "
+                        "block stays until a successful connect or plasma-nm-vpn-guard --clear",
+                        s->profile->server);
+            return FALSE;
+        }
+        pnv_message(s, "under the inherited block: using the cached IP %s", s->server_ip);
     } else {
         resolver = g_resolver_get_default();
         s->server_ip = pnv_resolve_server(resolver, s->profile->server, RESOLVE_WAIT_MS, &local);
@@ -290,6 +299,23 @@ void pnv_session_succeeded(PnvSession *s)
 
     pnv_state_set(s->run_dir, "succeeded", TRUE);
     pnv_message(s, "session succeeded");
+    if (s->inherited) {
+        g_autoptr(GError) swap = NULL;
+
+        /* The inherited chains become this session's in one transaction, or go if the profile no longer
+         * qualifies; there is no moment without either. */
+        if (s->profile->kill_switch && default_route(s)) {
+            if (pnv_killswitch_install(s->uuid, s->profile->allow_lan, &swap))
+                s->kill_switch = TRUE;
+            else
+                pnv_warning(s, "cannot take over the inherited kill switch: %s", swap->message);
+        } else {
+            pnv_killswitch_remove(s->uuid);
+        }
+        pnv_message(s, "inherited block %s", s->kill_switch ? "taken over" : "removed (the profile no longer asks for it)");
+        s->inherited = FALSE;
+        pnv_state_set(s->run_dir, "inherited", FALSE);
+    }
     if (!s->server_literal && !pnv_cache_write(PNV_CACHE_DIR, s->uuid, s->profile->server, s->server_ip, &error))
         pnv_warning(s, "cannot cache the server IP: %s", error->message);
 }
@@ -355,6 +381,12 @@ gboolean pnv_session_prepare(PnvSession *s, GError **error)
     pnv_tun_name(s->uuid, s->tun);
     if (!cleanup_orphans(s, error) || !start_guard(s, error))
         return FALSE;
+    /* A kill switch left by an earlier session that had succeeded: work under it until this one succeeds. */
+    if (pnv_killswitch_present(s->uuid)) {
+        s->inherited = TRUE;
+        pnv_state_set(s->run_dir, "inherited", TRUE);
+        pnv_message(s, "the kill switch of an earlier session is in place: working under it (inherited block)");
+    }
 #ifdef PNV_TEST_HOOKS
     test_chain_add(s);
 #endif
@@ -375,9 +407,8 @@ gboolean pnv_session_prepare(PnvSession *s, GError **error)
     if (!pnv_guard_install(s->uuid, error))
         return FALSE;
     pnv_message(s, "DNS and IPv6 guard installed");
-    if (!s->profile->kill_switch)
+    if (!s->profile->kill_switch || s->inherited)
         return TRUE;
-    /* Until 5.2: leftover chains of this profile are replaced in the same transaction. */
     if (!pnv_killswitch_install(s->uuid, s->profile->allow_lan, error))
         return FALSE;
     s->kill_switch = TRUE;

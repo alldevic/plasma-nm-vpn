@@ -105,3 +105,13 @@ void pnv_killswitch_remove(const char *uuid)
     if (!pnv_nft_run(script, &error))
         g_warning("[%s] cannot remove the kill switch: %s", uuid, error->message);
 }
+
+/* Whether this profile's kill switch chains exist (left over by an earlier session, 5.2). */
+gboolean pnv_killswitch_present(const char *uuid)
+{
+    g_autofree char *chain = g_strdup_printf("ks-out-%s", uuid);
+    g_autoptr(GSubprocess) nft = g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE,
+                                                  NULL, NFT, "list", "chain", "inet", "plasma_nm_vpn", chain, NULL);
+
+    return nft && g_subprocess_wait(nft, NULL, NULL) && g_subprocess_get_successful(nft);
+}

@@ -50,6 +50,7 @@ gboolean pnv_guard_install(const char *uuid, GError **error);
 void pnv_guard_remove(const char *uuid);
 gboolean pnv_killswitch_install(const char *uuid, gboolean allow_lan, GError **error);
 void pnv_killswitch_remove(const char *uuid);
+gboolean pnv_killswitch_present(const char *uuid);
 
 /* The server IP (server.c) and the TUN subnet (pool.c). */
 char *pnv_pick_server_ip(GList *v4, GList *v6);

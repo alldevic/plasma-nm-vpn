@@ -28,6 +28,7 @@ struct PnvSession {
     gboolean core_ready;
     char *test_hook;
     gboolean kill_switch;          /* the kill switch chains were installed by this session */
+    gboolean inherited;            /* working under the chains of an earlier session, until success */
     gboolean give_up;              /* set before nm_vpn_service_plugin_failure, which calls disconnect */
     guint deactivation_reason;     /* NMActiveConnectionStateReason seen on the VPN connection, 0: none */
 };

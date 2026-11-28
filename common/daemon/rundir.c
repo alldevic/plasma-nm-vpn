@@ -52,8 +52,9 @@ gboolean pnv_daemon_gone(const char *uuid)
     pnv_tun_delete(tun);
     g_unlink(socket_path = pnv_uapi_socket(tun));
     pnv_guard_remove(uuid);
-    /* Fail closed: after a session that had succeeded, the kill switch outlives the daemon. */
-    if (!pnv_state_get(run, "succeeded"))
+    /* Fail closed: after a session that had succeeded, or one that ran under an inherited block, the kill
+     * switch outlives the daemon. */
+    if (!pnv_state_get(run, "succeeded") && !pnv_state_get(run, "inherited"))
         pnv_killswitch_remove(uuid);
 #ifdef PNV_TEST_HOOKS
     {
