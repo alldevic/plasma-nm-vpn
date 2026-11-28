@@ -33,6 +33,10 @@ target_link_libraries(test-xray-config PRIVATE pnv-xray-config)
 add_test(NAME xray-config COMMAND test-xray-config ${PROJECT_SOURCE_DIR}/backends/xray/data
          ${PROJECT_SOURCE_DIR}/tests/golden/xray-26.11.9)
 
+add_executable(test-import test_import.c)
+target_link_libraries(test-import PRIVATE pnv-profile)
+add_test(NAME import COMMAND test-import ${PROJECT_SOURCE_DIR})
+
 add_executable(test-liveness test_liveness.c)
 target_link_libraries(test-liveness PRIVATE pnv-daemon)
 add_test(NAME liveness COMMAND test-liveness)

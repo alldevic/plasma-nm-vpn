@@ -1,0 +1,5 @@
+Address = 10.8.0.2/32
+[Peer]
+PublicKey = a
+[Peer]
+PublicKey = b

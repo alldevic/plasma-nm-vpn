@@ -54,12 +54,28 @@ typedef enum {
     PNV_E_BAD_PATH,           /* key: not an HTTP path (6.4) */
     PNV_E_BAD_ENCRYPTION,     /* key: neither none nor a VLESS Encryption key (6.4) */
     PNV_E_BAD_CHAIN,          /* key: a character an AmneziaWG tag chain cannot hold (6.4) */
+    /* The import parsers (6.6): errors, then warnings. */
+    PNV_E_IMPORT_FORMAT,      /* not a hysteria2://, hy2:// or vless:// link nor an AmneziaWG .conf */
+    PNV_E_IMPORT_TOO_LARGE,   /* max: the limit in bytes */
+    PNV_E_IMPORT_UNSUPPORTED, /* detail: the feature (gecko, ech, hysteria2+realm, pinSHA256) */
+    PNV_E_IMPORT_BAD_LINK,    /* detail: the part of the link (scheme, host, port, path, query, encoding) */
+    PNV_E_IMPORT_NOT_REALITY, /* key: type or security; a vless:// link needs type=xhttp and security=reality */
+    PNV_E_IMPORT_PEERS,       /* a .conf with more than one [Peer] */
+    PNV_E_IMPORT_BAD_LINE,    /* position: the line of the .conf */
+    PNV_E_IMPORT_DUPLICATE,   /* key: given twice */
+    PNV_W_DROPPED,            /* key: a parameter neither in the form nor on the extra allowlist, dropped */
+    PNV_W_WG_QUICK,           /* key: a wg-quick key (hook, Table, SaveConfig), dropped */
+    PNV_W_EXTRA_ADDRESS,      /* key, position: an IPv4 entry after the first, dropped (Ip4Config holds one) */
+    PNV_W_IPV6,               /* key, position: an IPv6 entry, dropped (IPv6 in the tunnel is phase 2) */
+    PNV_W_DNS_NAME,           /* key, position: a DNS entry that is not an IP address (a search domain), dropped */
 } PnvCode;
 
-/* The codes are grouped by origin, each group a range: the validators (2.2) here; the import parsers (6.6) and
- * the export (6.8) append theirs after it. */
+/* The codes are grouped by origin, each group a range: the validators (2.2) and the import parsers (6.6); the
+ * export (6.8) appends its group after them. */
 #define PNV_CODES_VALIDATOR_FIRST PNV_E_UNKNOWN_SERVICE
 #define PNV_CODES_VALIDATOR_LAST PNV_E_BAD_CHAIN
+#define PNV_CODES_PARSER_FIRST PNV_E_IMPORT_FORMAT
+#define PNV_CODES_PARSER_LAST PNV_W_DNS_NAME
 
 /* Never carries a value from the profile: only key names, JSON paths, positions and limits. */
 typedef struct {
@@ -182,6 +198,9 @@ const PnvSecret *pnv_service_secrets(const char *service); /* NULL-terminated; N
  * prefixes (pnv_list_merge); NULL rejects everything that needs them. */
 PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable *secrets,
                               const PnvList *allowlist, PnvProblem *problem);
+/* The same checks without requiring the secrets: an imported link may come without them. */
+gboolean pnv_profile_check(const char *service, GHashTable *data, GHashTable *secrets, const PnvList *allowlist,
+                           PnvProblem *problem);
 void pnv_profile_free(PnvProfile *profile);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(PnvProfile, pnv_profile_free)
 
@@ -208,6 +227,25 @@ gboolean pnv_parse_alpn(const char *key, const char *value, GPtrArray **out, Pnv
 /* Member paths are looked up as prefix + path; an entry "a.*" allows any member name directly under a. */
 gboolean pnv_parse_extra(const char *key, const char *value, const PnvList *allowed, const char *prefix, JsonObject **out,
                          PnvProblem *problem);
+
+/* Import (6.6): a hysteria2:// or hy2:// link, a vless:// link or an AmneziaWG .conf → the profile's fields. The
+ * result passes the validators above; what does not fit is dropped with a warning, never silently. The link's
+ * #fragment is ignored: plasma-nm names the connection from its own field. */
+#define PNV_IMPORT_MAX_SIZE (64 * 1024)
+
+typedef struct {
+    const char *service; /* PNV_SERVICE_* */
+    GHashTable *data;    /* vpn.data, char * → char * */
+    GHashTable *secrets; /* vpn.secrets; a link without secrets leaves them out */
+    GArray *warnings;    /* PnvProblem, in input order */
+} PnvImport;
+
+/* The service a text imports as, by its form alone; NULL if it is none of the formats. */
+const char *pnv_import_service(const char *text);
+/* lists: the target service's lists merged under their prefixes, as its daemon loads them. */
+PnvImport *pnv_import(const char *text, const PnvList *lists, PnvProblem *problem);
+void pnv_import_free(PnvImport *import);
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(PnvImport, pnv_import_free)
 
 G_END_DECLS
 

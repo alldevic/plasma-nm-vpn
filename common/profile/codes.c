@@ -42,6 +42,19 @@ static const struct {
     [PNV_E_BAD_PATH] = {"bad-path", "%K is not a path that starts with / and has no spaces"},
     [PNV_E_BAD_ENCRYPTION] = {"bad-encryption", "%K is neither none nor a VLESS Encryption key"},
     [PNV_E_BAD_CHAIN] = {"bad-chain", "%K has a character a tag chain cannot hold"},
+    [PNV_E_IMPORT_FORMAT] = {"import-format", "not a hysteria2://, hy2:// or vless:// link nor an AmneziaWG .conf"},
+    [PNV_E_IMPORT_TOO_LARGE] = {"import-too-large", "the text to import is larger than %X bytes"},
+    [PNV_E_IMPORT_UNSUPPORTED] = {"import-unsupported", "%D is not supported in this version"},
+    [PNV_E_IMPORT_BAD_LINK] = {"import-bad-link", "the link has a malformed %D"},
+    [PNV_E_IMPORT_NOT_REALITY] = {"import-not-reality", "the link's %K is not supported: only type=xhttp with security=reality"},
+    [PNV_E_IMPORT_PEERS] = {"import-peers", "the .conf has more than one [Peer]"},
+    [PNV_E_IMPORT_BAD_LINE] = {"import-bad-line", "the .conf has a malformed line %P"},
+    [PNV_E_IMPORT_DUPLICATE] = {"import-duplicate", "%K is given twice"},
+    [PNV_W_DROPPED] = {"dropped", "%K is not supported here and was dropped"},
+    [PNV_W_WG_QUICK] = {"wg-quick", "%K is a wg-quick setting and was dropped"},
+    [PNV_W_EXTRA_ADDRESS] = {"extra-address", "%K: entry %P was dropped, only the first IPv4 address is used"},
+    [PNV_W_IPV6] = {"ipv6", "%K: entry %P is IPv6 and was dropped"},
+    [PNV_W_DNS_NAME] = {"dns-name", "%K: entry %P is not an IP address and was dropped"},
 };
 
 const char *pnv_code_name(PnvCode code)

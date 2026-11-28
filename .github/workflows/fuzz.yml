@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [profile, extra]
+        target: [profile, extra, import-hysteria2, import-vless, import-amneziawg]
     steps:
       - name: Install tools
         run: |

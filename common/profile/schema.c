@@ -519,8 +519,8 @@ static gboolean check_required(const Field *fields, PnvProfile *profile, PnvProb
     return TRUE;
 }
 
-PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable *secrets,
-                              const PnvList *allowlist, PnvProblem *p)
+static PnvProfile *parse(const char *service, GHashTable *data, GHashTable *secrets,
+                         const PnvList *allowlist, PnvProblem *p, gboolean need_secrets)
 {
     const Protocol *protocol = find_protocol(service);
     g_autoptr(PnvProfile) profile = NULL;
@@ -578,12 +578,25 @@ PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable 
         const char *when = s->when && data ? g_hash_table_lookup(data, s->when) : NULL;
         const Field *f = find_in(protocol->secret_fields, s->key);
 
-        if (!s->optional && (!s->when || (when && *when)) && !*(char **)((char *)profile + f->offset)) {
+        if (need_secrets && !s->optional && (!s->when || (when && *when)) && !*(char **)((char *)profile + f->offset)) {
             fail(p, PNV_E_MISSING, s->key, NULL, 0, 0);
             return NULL;
         }
     }
     return g_steal_pointer(&profile);
+}
+
+PnvProfile *pnv_profile_parse(const char *service, GHashTable *data, GHashTable *secrets, const PnvList *allowlist,
+                              PnvProblem *p)
+{
+    return parse(service, data, secrets, allowlist, p, TRUE);
+}
+
+gboolean pnv_profile_check(const char *service, GHashTable *data, GHashTable *secrets, const PnvList *allowlist,
+                           PnvProblem *p)
+{
+    g_autoptr(PnvProfile) profile = parse(service, data, secrets, allowlist, p, FALSE);
+    return profile != NULL;
 }
 
 gboolean pnv_check_field(const char *service, const char *key, const char *value, const PnvList *allowlist,

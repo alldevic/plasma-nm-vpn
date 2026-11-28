@@ -1,0 +1,9 @@
+PostUp = x
+Table = off
+Address = fd00::2/64, 10.8.0.2/24
+DNS = 10.8.0.1, 2001:db8::1, corp.example
+[Peer]
+PublicKey = YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWY=
+Endpoint = [2001:db8::1]:51820
+AllowedIPs = 0.0.0.0/1, ::/0
+AllowedIPs = 128.0.0.0/1

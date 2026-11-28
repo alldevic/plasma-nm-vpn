@@ -1,0 +1,1 @@
+hysteria2://4cfe6b51c9a1f0d2e7b38a6c5d4e3f21@srv.stand.test:443/?obfs=salamander&obfs-password=79b63d51a9800c5338f711cff5890afa&sni=srv.stand.test&insecure=1#bench
