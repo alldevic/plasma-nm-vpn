@@ -834,6 +834,11 @@ static void core_changed(GDBusConnection *bus G_GNUC_UNUSED, const char *sender 
         return;
     if (!g_str_equal(state, "failed") && !g_str_equal(state, "inactive") && !g_str_equal(state, "deactivating"))
         return;
+    /* The signals of the unit's start queue up while the daemon waits for the carrier, so an "inactive" from
+     * before the start can arrive once the core is up (seen in CI): only the unit's state now counts. */
+    g_autofree char *now = pnv_unit_state(s->core);
+    if (g_str_equal(now, "active") || g_str_equal(now, "activating") || g_str_equal(now, "reloading"))
+        return;
     if (s->live_succeeded) {
         g_autofree char *trigger = g_strdup_printf("%s stopped (%s)", s->core, state);
         s->core_ready = FALSE;

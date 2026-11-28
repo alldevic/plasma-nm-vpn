@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+include /usr/share/dpkg/architecture.mk
 include /usr/share/dpkg/pkg-info.mk
 
 # The cores come from scripts/fetch-cores, run before the build (the build itself needs no network).
@@ -43,9 +44,10 @@ override_dh_strip:
 override_dh_dwz:
 	dh_dwz -X$(BIN)/
 
-# plasma-nm ships no shlibs file for libplasmanm_editor.so; its dependency is set by hand.
+# plasma-nm ships no shlibs file for libplasmanm_editor.so; its dependency is set by hand. The editors find the
+# widget library of plasma-nm-vpn-common there, which they depend on at the exact version.
 override_dh_shlibdeps:
-	dh_shlibdeps -- --ignore-missing-info
+	dh_shlibdeps -l$(CURDIR)/debian/plasma-nm-vpn-common/usr/lib/$(DEB_HOST_MULTIARCH)/plasma-nm-vpn -- --ignore-missing-info
 
 override_dh_gencontrol:
 	dh_gencontrol -pplasma-nm-vpn-sb -- -v$(SB_VERSION) -Vpnv:Version=$(DEB_VERSION) -Vqt:BuildVersion=$(QT_VERSION)
