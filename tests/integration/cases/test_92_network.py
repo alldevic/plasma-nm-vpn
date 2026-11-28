@@ -28,6 +28,8 @@ def both_parents():
         for name in ("stand", "stand-wifi"):
             if sh(f"nmcli -g GENERAL.STATE connection show {name}", check=False).strip() != "activated":
                 sh(f"nmcli --wait 30 connection up {name}", check=False)
+        for name in ("stand", "stand-wifi"):
+            assert sh(f"nmcli -g GENERAL.STATE connection show {name}").strip() == "activated", name
     if not ok("nmcli -g GENERAL.STATE connection show stand-wifi"):
         pytest.skip("no Wi-Fi on the bench (mac80211_hwsim)")
     up()

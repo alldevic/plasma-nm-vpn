@@ -4,6 +4,7 @@ import re
 import pytest
 
 from conftest import DNS_MODE, sh
+from helpers import ok
 
 
 def test_client_veth_managed_and_connected():
@@ -30,9 +31,11 @@ def test_internet_unreachable_without_tunnel():
 
 
 def test_only_client_veth_has_default_routes():
-    for family in ("-4", "-6"):
+    """And the emulated Wi-Fi, the second parent (IPv4 only), where the kernel has it (5.8)."""
+    wifi = {"wlan0"} if ok("nmcli -g GENERAL.STATE connection show stand-wifi") else set()
+    for family, expected in (("-4", {"stand-cli"} | wifi), ("-6", {"stand-cli"})):
         devs = set(re.findall(r"\bdev (\S+)", sh(f"ip {family} route show default")))
-        assert devs == {"stand-cli"}, family
+        assert devs == expected, family
 
 
 def test_management_nic_up_without_ipv6():
@@ -60,11 +63,9 @@ def test_resolved_in_use_with_isp_dns_only():
 
 @pytest.mark.kvm
 def test_wifi_emulation_available():
-    sh("modprobe mac80211_hwsim radios=2")
-    try:
-        assert len(re.findall(r"^wlan\d", sh("ls /sys/class/net"), re.M)) >= 2
-    finally:
-        sh("modprobe -r mac80211_hwsim")
+    """stand-up's wifi(): one hwsim radio is the access point in netns stand, the other the client under NM."""
+    assert "wlan-srv" in sh("ip netns exec stand ip -br link")
+    assert sh("nmcli -g GENERAL.STATE connection show stand-wifi").strip() == "activated"
 
 
 @pytest.mark.kvm
