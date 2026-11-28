@@ -43,6 +43,9 @@ protected:
     void finish(const NetworkManager::VpnSetting::Ptr &setting);
 
 public:
+    // The form in the format import reads (6.8); also what the test driver calls, by name.
+    Q_INVOKABLE QString exportText(bool withSecrets) const;
+    Q_INVOKABLE bool exportToFile(const QString &path, bool withSecrets) const;
     // Fills the form from an import; asks first if the form already has fields filled in. False if declined.
     bool applyImport(const NMStringMap &data, const NMStringMap &secrets);
     // For tests: the question before an import replaces filled-in fields.
@@ -60,6 +63,7 @@ private:
     QList<QPair<QString, PasswordField *>> m_secrets;
     QStringList m_optional;
     std::function<bool()> m_confirm;
+    QList<PnvImportWidget::ListFile> m_lists;
 };
 
 // The prompt kded6 shows for a secret asked every time or rejected: the secrets NM names in its hints, otherwise

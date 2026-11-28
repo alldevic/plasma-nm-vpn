@@ -69,14 +69,19 @@ typedef enum {
     PNV_W_IPV6,               /* key, position: an IPv6 entry, dropped (IPv6 in the tunnel is phase 2) */
     PNV_W_DNS_NAME,           /* key, position: a DNS entry that is not an IP address (a search domain), dropped */
     PNV_W_TO_EXTRA,           /* key: a parameter the form lacks, carried into extra by the allowlist (6.7) */
+    /* The export (6.8). */
+    PNV_W_EXPORT_LOST,        /* key: a field the format does not carry */
+    PNV_W_EXPORT_NO_SECRET,   /* key: a secret asked every time, so not in the profile to export */
 } PnvCode;
 
-/* The codes are grouped by origin, each group a range: the validators (2.2) and the import parsers (6.6); the
- * export (6.8) appends its group after them. */
+/* The codes are grouped by origin, each group a range: the validators (2.2), the import parsers (6.6) and the
+ * export (6.8). */
 #define PNV_CODES_VALIDATOR_FIRST PNV_E_UNKNOWN_SERVICE
 #define PNV_CODES_VALIDATOR_LAST PNV_E_BAD_CHAIN
 #define PNV_CODES_PARSER_FIRST PNV_E_IMPORT_FORMAT
 #define PNV_CODES_PARSER_LAST PNV_W_TO_EXTRA
+#define PNV_CODES_EXPORT_FIRST PNV_W_EXPORT_LOST
+#define PNV_CODES_EXPORT_LAST PNV_W_EXPORT_NO_SECRET
 
 /* Never carries a value from the profile: only key names, JSON paths, positions and limits. */
 typedef struct {
@@ -247,6 +252,12 @@ const char *pnv_import_service(const char *text);
 PnvImport *pnv_import(const char *text, const PnvList *lists, PnvProblem *problem);
 void pnv_import_free(PnvImport *import);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(PnvImport, pnv_import_free)
+
+/* Export (6.8): the profile as a hysteria2:// or vless:// link or an AmneziaWG .conf, which pnv_import() reads back.
+ * secrets NULL: none are written. warnings (PnvProblem) names each set field the format does not carry and each
+ * secret asked every time; flags keys and schema are the profile's own and not reported. lists: for the AmneziaWG
+ * parameter names. */
+char *pnv_export(const char *service, GHashTable *data, GHashTable *secrets, const PnvList *lists, GArray *warnings);
 
 G_END_DECLS
 

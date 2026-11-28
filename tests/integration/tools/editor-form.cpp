@@ -5,7 +5,8 @@
 //   editor-form <service> new <name> [<object>=<value> | <field>:option=<option> ...]
 //   editor-form <service> edit <uuid> [...]
 // A value goes into the QLineEdit, QPlainTextEdit, PasswordField, QCheckBox (yes/no) or QComboBox (item data) of
-// that name; click=<button> presses a button; importFile=<path> imports a file. Options: user, all, ask, none.
+// that name; click=<button> presses a button; importFile=<path> imports a file; exportFile=<path> and
+// exportSecretsFile=<path> export to a file. Options: user, all, ask, none.
 // Prints one JSON line: valid, problems, uuid, and the import and banner messages when shown.
 #include <NetworkManagerQt/Connection>
 #include <NetworkManagerQt/ConnectionSettings>
@@ -38,6 +39,14 @@ static int fail(const QString &why)
 
 static bool set(QWidget *form, const QString &name, const QString &value)
 {
+    // exportFile=<path>, exportSecretsFile=<path>: "Export…" saving to a file, without or with the secrets. The
+    // editor's class lives in its plugin, so it is called by name.
+    if (name == QLatin1String("exportFile") || name == QLatin1String("exportSecretsFile")) {
+        bool ok = false;
+        return QMetaObject::invokeMethod(form, "exportToFile", Q_RETURN_ARG(bool, ok), Q_ARG(QString, value),
+                                         Q_ARG(bool, name == QLatin1String("exportSecretsFile")))
+            && ok;
+    }
     // importFile=<path>: what "Open File…" does once a file is chosen.
     if (name == QLatin1String("importFile")) {
         auto *import = form->findChild<PnvImportWidget *>();

@@ -117,3 +117,53 @@ def test_refused_imports_leave_the_form(names, conf, case):
     assert expected in out.get("import", ""), out
     assert not out["valid"]
     assert sh("nmcli -g NAME connection show", check=False).count("pnv-i-ref") == 0
+
+
+# Export (6.8), through the same driver: what an editor's "Export…" writes to a file.
+def exported(service, uuid, tmp_path, secrets):
+    path = tmp_path / ("secrets.txt" if secrets else "plain.txt")
+    os.chmod(tmp_path, 0o755)
+    out = form(service, "edit", uuid, f"{'exportSecretsFile' if secrets else 'exportFile'}={path}")
+    assert "error" not in out, out
+    return path
+
+
+def test_mlkem_survives_import_export_import(names, tmp_path):
+    names += ["pnv-i-mlkem", "pnv-i-mlkem2"]
+    golden = open(f"{os.path.dirname(__file__)}/../../golden/xray-26.11.9/mlkem.json").read()
+    value = golden[golden.index("mlkem768x25519plus."):]
+    value = value[:value.index('"')]
+    link = vless_link().replace("encryption=none", f"encryption={value}")
+    out = imported(VLESS, "pnv-i-mlkem", [f"importText={link}", "click=importButton"], "uuid:option=all")
+    assert out["valid"] and "error" not in out, out
+    assert show("pnv-i-mlkem", "vpn.data")["encryption"] == value
+    path = exported(VLESS, out["uuid"], tmp_path, secrets=True)
+    text = path.read_text()
+    assert f"encryption={value}" in text
+    again = imported(VLESS, "pnv-i-mlkem2", [f"importText={text}", "click=importButton"], "uuid:option=all")
+    assert again["valid"] and show("pnv-i-mlkem2", "vpn.data")["encryption"] == value
+
+
+@pytest.mark.parametrize("protocol", ["hysteria2", "vless", "amneziawg"])
+def test_export_secrets_and_modes(names, conf, tmp_path, protocol):
+    names.append("pnv-i-exp")
+    if protocol == "amneziawg":
+        text = open(CLIENT).read().replace("[Interface]", "[Interface]\nAddress = 100.64.0.2/24", 1)
+        out = imported(AWG, "pnv-i-exp", [f"importFile={conf(text)}"], "private-key:option=all",
+                       "awg-headerprotectionkey:option=all")
+        service, secrets = AWG, ("PrivateKey", "HeaderProtectionKey", "PresharedKey")
+    else:
+        service, link = (HY2, hy2_link()) if protocol == "hysteria2" else (VLESS, vless_link())
+        names_ = ["password", "obfs-password"] if protocol == "hysteria2" else ["uuid"]
+        out = imported(service, "pnv-i-exp", [f"importText={link}", "click=importButton"],
+                       *(f"{k}:option=all" for k in names_))
+        s = bench_secrets()
+        secrets = (s["HY2_PASSWORD"], s["HY2_OBFS"]) if protocol == "hysteria2" else (s["VLESS_UUID"],)
+    assert out["valid"], out
+    plain = exported(service, out["uuid"], tmp_path, secrets=False)
+    assert not any(secret in plain.read_text() for secret in secrets)
+    assert os.stat(plain).st_mode & 0o777 == 0o644
+    with_secrets = exported(service, out["uuid"], tmp_path, secrets=True)
+    assert os.stat(with_secrets).st_mode & 0o777 == 0o600
+    if protocol != "amneziawg":
+        assert all(secret in with_secrets.read_text() for secret in secrets)

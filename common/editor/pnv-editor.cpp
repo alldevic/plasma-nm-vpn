@@ -6,9 +6,11 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
 
+#include "exportdialog.h"
 #include "killswitchbanner.h"
 #include "pnv-profile.h"
 #include "pnv-secrets.h"
@@ -81,13 +83,36 @@ PasswordField::PasswordOption PnvEditorWidget::secretOption(const QString &, con
 
 void PnvEditorWidget::addImport(const QList<PnvImportWidget::ListFile> &lists)
 {
-    auto *box = new QGroupBox(i18nc("@title:group", "Import"));
+    m_lists = lists;
+    auto *box = new QGroupBox(i18nc("@title:group", "Import and Export"));
     auto *layout = new QVBoxLayout(box);
     layout->addWidget(new PnvImportWidget(m_service, lists, [this](const NMStringMap &data, const NMStringMap &secrets) {
         return applyImport(data, secrets);
     }));
+    auto *exportButton = new QPushButton(QIcon::fromTheme(QStringLiteral("document-export")),
+                                         i18nc("@action:button", "Export…"), box);
+    exportButton->setObjectName(QStringLiteral("exportButton"));
+    layout->addWidget(exportButton, 0, Qt::AlignLeft);
+    connect(exportButton, &QPushButton::clicked, this, [this] {
+        NetworkManager::VpnSetting vpn;
+        vpn.fromMap(setting());
+        PnvExportDialog dialog(m_service, vpn.data(), vpn.secrets(), m_lists, this);
+        dialog.exec();
+    });
     // Under the kill switch banner, above the groups.
     m_content->insertWidget(1, box);
+}
+
+QString PnvEditorWidget::exportText(bool withSecrets) const
+{
+    NetworkManager::VpnSetting vpn;
+    vpn.fromMap(setting());
+    return pnvExport(m_service, vpn.data(), vpn.secrets(), withSecrets, m_lists).text;
+}
+
+bool PnvEditorWidget::exportToFile(const QString &path, bool withSecrets) const
+{
+    return pnvWriteExport(path, exportText(withSecrets), withSecrets, nullptr);
 }
 
 void PnvEditorWidget::setImportConfirmation(std::function<bool()> confirm)

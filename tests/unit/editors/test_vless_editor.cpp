@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -156,6 +157,30 @@ private Q_SLOTS:
         QCOMPARE(saved(widget).data().value(QStringLiteral("encryption")), value);
         widget.findChild<QLineEdit *>(QStringLiteral("encryption"))->setText(QStringLiteral("mlkem768x25519plus.native/0rtt"));
         QVERIFY(!widget.isValid());
+    }
+
+    // The 6.8 chain: an ML-KEM value saved, exported, imported into a new profile, unchanged.
+    void mlkemSurvivesExportAndImport()
+    {
+        QFile golden(QStringLiteral(PNV_SOURCE_DIR "/tests/golden/xray-26.11.9/mlkem.json"));
+        QVERIFY(golden.open(QIODevice::ReadOnly));
+        const QString key = QString::fromUtf8(golden.readAll());
+        const qsizetype start = key.indexOf(QLatin1String("mlkem768x25519plus."));
+        const QString value = key.mid(start, key.indexOf(QLatin1Char('"'), start) - start);
+        NMStringMap data = full;
+        data.insert(QStringLiteral("encryption"), value);
+        VlessWidget source(profile(data, map({{"uuid", uuid.toUtf8().constData()}})), nullptr, DataDir);
+        const QString link = source.exportText(true);
+        QVERIFY(link.contains(value) && link.contains(uuid));
+        QVERIFY(!source.exportText(false).contains(uuid));
+        VlessWidget target(profile({}), nullptr, DataDir);
+        target.findChild<QPlainTextEdit *>(QStringLiteral("importText"))->setPlainText(link);
+        target.findChild<QPushButton *>(QStringLiteral("importButton"))->click();
+        const NetworkManager::VpnSetting vpn = saved(target);
+        QCOMPARE(vpn.data().value(QStringLiteral("encryption")), value);
+        QCOMPARE(vpn.secrets().value(QStringLiteral("uuid")), uuid);
+        for (const char *key : {"reality-pbk", "reality-sid", "tls-fingerprint", "xhttp-mode", "xhttp-path", "xhttp-host", "xhttp-extra"})
+            QCOMPARE(vpn.data().value(QLatin1String(key)), data.value(QLatin1String(key)));
     }
 
     void invalidFields_data()

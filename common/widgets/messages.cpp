@@ -66,6 +66,9 @@ constexpr Message messages[] = {
     {PNV_W_IPV6, kli18nc("@info", "%1: entry %2 is IPv6 and was dropped"), "kp"},
     {PNV_W_DNS_NAME, kli18nc("@info", "%1: entry %2 is not an IP address and was dropped"), "kp"},
     {PNV_W_TO_EXTRA, kli18nc("@info", "%1 was carried into the additional parameters"), "k"},
+    // The export (6.8).
+    {PNV_W_EXPORT_LOST, kli18nc("@info", "%1 is not carried by this format and is left out"), "k"},
+    {PNV_W_EXPORT_NO_SECRET, kli18nc("@info", "%1 is asked for every time, so it is not in the export"), "k"},
 };
 
 const Message *find(PnvCode code)
